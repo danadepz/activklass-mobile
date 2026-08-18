@@ -9,8 +9,13 @@ import { StatusBar } from 'expo-status-bar';
 
 export default function ParentChangePassScreen() {
   const router = useRouter();
-  const { refreshProfile } = useAuth();
-  
+  const { profile, refreshProfile } = useAuth();
+
+  // Two ways in: forced here at sign-in on a provisioned account, or reached
+  // deliberately from the profile screen. Only the first is a first-time setup,
+  // and only the first should land on the dashboard afterwards.
+  const isForced = Boolean(profile?.is_temp_password);
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,8 +59,13 @@ export default function ParentChangePassScreen() {
       // 3. Refresh context profile so that status updates
       await refreshProfile();
 
-      // 4. Navigate to Parent Dashboard
-      router.replace('/parent/dashboard');
+      // 4. Forced first-time setup ends at the dashboard; a voluntary change
+      //    returns to wherever they came from.
+      if (isForced) {
+        router.replace('/parent/dashboard');
+      } else {
+        router.back();
+      }
 
     } catch (err: any) {
       console.error('[ParentChangePass] Error updating password:', err);
@@ -84,12 +94,14 @@ export default function ParentChangePassScreen() {
           </Text>
         </View>
 
-        {/* Security Warning Notice */}
-        <View className="bg-indigo-950/20 border border-indigo-900/30 p-4 rounded-xl mb-6">
-          <Text className="text-slate-300 text-xs leading-relaxed">
-            🔒 <Text className="font-semibold text-slate-200">First-Time Setup:</Text> You are currently logged in with a temporary password. You must configure a new, personal password to access your child's student records.
-          </Text>
-        </View>
+        {/* Security Warning Notice — only true when they were sent here. */}
+        {isForced && (
+          <View className="bg-indigo-950/20 border border-indigo-900/30 p-4 rounded-xl mb-6">
+            <Text className="text-slate-300 text-xs leading-relaxed">
+              🔒 <Text className="font-semibold text-slate-200">First-Time Setup:</Text> You are currently logged in with a temporary password. You must configure a new, personal password to access your child&apos;s student records.
+            </Text>
+          </View>
+        )}
 
         {/* Form Fields */}
         <View className="flex-1 justify-center space-y-4">
@@ -151,15 +163,23 @@ export default function ParentChangePassScreen() {
             )}
           </TouchableOpacity>
 
+          {/* Signing out is the only way out of a forced setup. A guardian who
+              came here by choice just wants to back out. */}
           <TouchableOpacity
             onPress={async () => {
-              await signOut(auth);
-              router.replace('/login');
+              if (isForced) {
+                await signOut(auth);
+                router.replace('/login');
+              } else {
+                router.back();
+              }
             }}
             disabled={loading}
             className="w-full items-center justify-center mt-4"
           >
-            <Text className="text-slate-400 text-sm font-semibold">Sign Out</Text>
+            <Text className="text-slate-400 text-sm font-semibold">
+              {isForced ? 'Sign Out' : 'Cancel'}
+            </Text>
           </TouchableOpacity>
         </View>
 

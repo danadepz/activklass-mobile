@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Svg, Circle } from 'react-native-svg';
-import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { errorMessage } from '../../src/lib/api';
 import {
@@ -37,7 +36,6 @@ import {
  */
 export default function ParentDashboard() {
   const router = useRouter();
-  const { logout } = useAuth();
 
   const [children, setChildren] = useState<DashboardChild[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -152,11 +150,14 @@ export default function ParentDashboard() {
           >
             <Text className="text-white text-xs font-bold">+ Add Child</Text>
           </TouchableOpacity>
+          {/* Profile rather than Logout: the header only has room for two
+              buttons, and logging out now lives inside the profile screen —
+              the same place the student side keeps it. */}
           <TouchableOpacity
-            onPress={logout}
+            onPress={() => router.push('/parent/profile')}
             className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl"
           >
-            <Text className="text-slate-400 text-xs font-bold">Logout</Text>
+            <Text className="text-slate-400 text-xs font-bold">Profile</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -7,8 +7,13 @@ export interface UserProfile {
   id: string;
   first_name: string;
   last_name: string;
+  middle_name?: string | null;
   email: string;
   role: 'student' | 'parent' | 'teacher' | 'admin';
+  /** Guardians register with one; the parent profile screen edits it. */
+  contact_number?: string | null;
+  /** Set on accounts an admin provisioned; forces the change-password screen. */
+  is_temp_password?: boolean;
   student_number?: string;
   lrn?: string;
   birthdate?: string;
