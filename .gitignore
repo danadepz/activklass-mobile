@@ -43,3 +43,6 @@ yarn-error.*
 # IDE
 .idea/
 .vscode/
+
+# env
+.env

@@ -1,54 +1,37 @@
 import { initializeApp } from 'firebase/app';
-// @ts-ignore
+// @ts-ignore — getReactNativePersistence is not in the published types yet
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { connectAuthEmulator } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
-// Firebase configuration targeting the local emulator suite or production.
-// When using the emulator, these values can be dummy variables.
+// Config comes from .env (EXPO_PUBLIC_* is inlined into the bundle at build
+// time). These values are not secrets — they ship in every client build, and
+// Firestore security rules are what actually protect the data.
 const firebaseConfig = {
-  apiKey: "demo-api-key",
-  authDomain: "demo-activklass.firebaseapp.com",
-  projectId: "demo-activklass",
-  storageBucket: "demo-activklass.firebasestorage.app",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:0000000000000000000000",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase App
+if (!firebaseConfig.projectId) {
+  throw new Error(
+    'Firebase is not configured. Copy .env.example to .env and fill in the ' +
+      'values from Firebase Console > Project settings > General > Your apps.'
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with AsyncStorage persistence for React Native
+// AsyncStorage persistence keeps the user signed in across app restarts.
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage),
 });
 
-// Initialize Firestore & Storage
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Dynamic Host IP detection for Emulator Testing
-// On physical devices or simulators, localhost is not reachable.
-// expo-constants lets us discover the IP address of the development machine running Metro.
-const hostUri = Constants.expoConfig?.hostUri;
-const hostIp = hostUri ? hostUri.split(':')[0] : 'localhost';
-
-const USING_EMULATOR = true; // Set to false to point to a production Firebase instance
-
-if (USING_EMULATOR) {
-  console.log(`[FirebaseConfig] Connecting to Firebase Emulators at ${hostIp}`);
-  
-  // Connect Auth Emulator
-  connectAuthEmulator(auth, `http://${hostIp}:9099`, { disableWarnings: true });
-  
-  // Connect Firestore Emulator
-  connectFirestoreEmulator(db, hostIp, 8080);
-  
-  // Connect Storage Emulator
-  connectStorageEmulator(storage, hostIp, 9199);
-}
-
-export { app, auth, db, storage, hostIp };
+export { app, auth, db, storage };
