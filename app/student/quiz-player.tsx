@@ -1,22 +1,39 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  collection,
+  addDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
+import { gradeQuiz, isAnswered, matchingChoices } from '../../src/lib/quizGrading';
 
 export default function QuizPlayer() {
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
-  
+
   const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
-  
+  // Which attempt this is, counted the way the web player counts it: prior
+  // attempts for this (quiz, student) + 1. The teacher history and the parent
+  // quiz-scores endpoint both label rows by attempt_number.
+  const [attemptNumber, setAttemptNumber] = useState(1);
+
   // Timer State
   const [timeLeft, setTimeLeft] = useState(0);
   const timerRef = useRef<any>(null);
+  // One attempt document per submission. The timer and the Submit button can
+  // both reach submitQuizAttempt, and two docs would share an attempt_number.
+  const submittedRef = useRef(false);
 
   useEffect(() => {
     if (!quizId) return;
@@ -28,6 +45,20 @@ export default function QuizPlayer() {
           const quizData = docSnap.data();
           setQuiz(quizData);
           setTimeLeft((quizData.time_limit_minutes || quizData.time_limit || 15) * 60);
+
+          // Same query the web player runs, so the composite index and the
+          // quiz_attempts read rule (own student_id) already cover it.
+          const uid = auth.currentUser?.uid;
+          if (uid) {
+            const priorSnap = await getDocs(
+              query(
+                collection(db, 'quiz_attempts'),
+                where('quiz_id', '==', quizId as string),
+                where('student_id', '==', uid)
+              )
+            );
+            setAttemptNumber(priorSnap.size + 1);
+          }
         } else {
           Alert.alert('Error', 'Quiz not found.');
           router.back();
@@ -63,60 +94,23 @@ export default function QuizPlayer() {
     };
   }, [timeLeft, loading, quiz]);
 
-  const handleSelectOption = (questionId: string, optionId: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: optionId }));
+  /** An mcq option id, or a true_false boolean. */
+  const handleSelectOption = (questionId: string, value: string | boolean) => {
+    setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
   const handleTextAnswerChange = (questionId: string, text: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: text }));
   };
 
-  // Grade quiz attempt (Objective items graded client-side in Firestore-direct spec)
-  const gradeAttempt = () => {
-    let score = 0;
-    let totalPossible = 0;
-    let hasEssays = false;
-    
-    quiz.questions.forEach((q: any) => {
-      const studentAnswer = answers[q.id];
-      totalPossible += q.points || 1;
-      
-      if (q.qtype === 'mcq') {
-        const correctOpt = q.options.find((opt: any) => opt.is_correct);
-        if (correctOpt && studentAnswer === correctOpt.id) {
-          score += q.points || 1;
-        }
-      } else if (q.qtype === 'true_false') {
-        const correctVal = q.answer_key?.value;
-        // Parse student boolean if saved
-        const parsedAnswer = studentAnswer === 'True' ? true : studentAnswer === 'False' ? false : null;
-        if (parsedAnswer === correctVal) {
-          score += q.points || 1;
-        }
-      } else if (q.qtype === 'short_answer') {
-        const accepted = q.answer_key?.answers || [];
-        const cleanAns = (studentAnswer || '').trim().toLowerCase();
-        if (accepted.some((a: string) => a.trim().toLowerCase() === cleanAns)) {
-          score += q.points || 1;
-        }
-      } else if (q.qtype === 'matching') {
-        const pairs = q.answer_key?.pairs || [];
-        // Map matching scores proportionally
-        let correctCount = 0;
-        pairs.forEach((p: any) => {
-          if (studentAnswer?.[p.left] === p.right) {
-            correctCount++;
-          }
-        });
-        if (correctCount === pairs.length) {
-          score += q.points || 2;
-        }
-      } else if (q.qtype === 'essay') {
-        hasEssays = true;
-      }
-    });
-
-    return { score, totalPossible, hasEssays };
+  /** Keyed by row index, not by the left label. The web player and its grader
+   *  both use the index; keying by label would make an attempt submitted here
+   *  ungradable there. */
+  const handleMatchingChange = (questionId: string, rowIndex: number, right: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: { ...(prev[questionId] ?? {}), [rowIndex]: right },
+    }));
   };
 
   const autoSubmit = async () => {
@@ -124,9 +118,10 @@ export default function QuizPlayer() {
   };
 
   const handleSubmitPress = () => {
-    // Check if there are unanswered questions
-    const unansweredCount = quiz.questions.filter((q: any) => !answers[q.id]).length;
-    
+    // isAnswered, not truthiness: `false` is a real true_false answer, and a
+    // plain `!answers[q.id]` counted a deliberate "False" as a skip.
+    const unansweredCount = quiz.questions.filter((q: any) => !isAnswered(q, answers[q.id])).length;
+
     let confirmMsg = 'Are you sure you want to submit your assessment?';
     if (unansweredCount > 0) {
       confirmMsg = `You have ${unansweredCount} unanswered questions. Are you sure you want to submit?`;
@@ -141,11 +136,20 @@ export default function QuizPlayer() {
   const submitQuizAttempt = async (isAuto = false) => {
     const user = auth.currentUser;
     if (!user || !quiz) return;
-    
+    // One document per submission. The expired-timer alert and the Submit
+    // button can both land here, and a second document would carry a duplicate
+    // attempt_number and double-count in the teacher's averages.
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+
     setLoading(true);
-    
-    const { score, totalPossible, hasEssays } = gradeAttempt();
-    
+
+    // src/lib/quizGrading is the shared grader, deliberately the only one: this
+    // file used to grade matching all-or-nothing while the web gave
+    // proportional credit, so the same answers earned a different mark
+    // depending on the device.
+    const graded = gradeQuiz(quiz, answers);
+
     try {
       // Create quiz attempt document
       const attemptData = {
@@ -157,15 +161,23 @@ export default function QuizPlayer() {
         // (scaffolds mastery, quiz results stats, class history). Writing only
         // `score` makes a mobile attempt invisible to the teacher -- it is
         // skipped outright by the mastery calculation.
-        score,
-        total_score: score,
-        total_possible: totalPossible,
-        score_ratio: score / totalPossible,
-        module_id: quiz.module_id || 'm1',
+        score: graded.total_score,
+        total_score: graded.total_score,
+        total_possible: graded.total_possible,
+        score_ratio: graded.score_ratio,
+        // No 'm1' fallback: inventing a module id files the attempt against a
+        // unit the quiz may not belong to, and the scaffold mastery figures are
+        // grouped by it. Unknown is null.
+        module_id: quiz.module_id ?? null,
         answers,
+        // Read by the web feedback screen to show the per-item breakdown.
+        per_question: graded.per_question,
+        // Which try this is. The web player records it; without it a retake is
+        // indistinguishable from a first attempt in the teacher's results view.
+        attempt_number: attemptNumber,
         submitted_at: serverTimestamp(),
-        has_essays_pending: hasEssays,
-        status: hasEssays ? 'submitted' : 'graded',
+        has_essays_pending: graded.has_essays,
+        status: graded.has_essays ? 'submitted' : 'graded',
       };
 
       const docRef = await addDoc(collection(db, 'quiz_attempts'), attemptData);
@@ -178,6 +190,8 @@ export default function QuizPlayer() {
       
     } catch (e) {
       console.error('Error saving attempt:', e);
+      // Nothing was written, so let them try again.
+      submittedRef.current = false;
       Alert.alert('Submission Failed', 'Firestore rules blocked attempt logging.');
       setLoading(false);
     }
@@ -254,20 +268,59 @@ export default function QuizPlayer() {
             </TouchableOpacity>
           ))}
 
-          {/* True / False Selection */}
-          {currentQ.qtype === 'true_false' && ['True', 'False'].map((val) => (
+          {/* True / False Selection.
+              Stores a BOOLEAN, not the label. The web grader accepts a
+              true_false answer only when `typeof answer === 'boolean'`, and its
+              feedback page renders anything else as "no answer" -- which is why
+              a mobile true_false answer used to vanish from the web breakdown. */}
+          {currentQ.qtype === 'true_false' && [true, false].map((val) => (
             <TouchableOpacity
-              key={val}
+              key={String(val)}
               onPress={() => handleSelectOption(currentQ.id, val)}
               className={`p-4 rounded-xl border flex-row items-center mt-3 ${
-                answers[currentQ.id] === val 
-                  ? 'bg-indigo-600/15 border-indigo-500' 
+                answers[currentQ.id] === val
+                  ? 'bg-indigo-600/15 border-indigo-500'
                   : 'bg-slate-900 border-slate-850'
               }`}
             >
-              <Text className="text-white text-sm font-semibold">{val}</Text>
+              <Text className="text-white text-sm font-semibold">{val ? 'True' : 'False'}</Text>
             </TouchableOpacity>
           ))}
+
+          {/* Matching — one row per left item, tap a right option to pair it.
+              Answers are keyed by ROW INDEX, matching the web player, so an
+              attempt submitted here grades and renders identically there.
+              Chips rather than a picker: React Native has no <select>. */}
+          {currentQ.qtype === 'matching' && (
+            <View className="mt-2">
+              <Text className="text-slate-400 text-xs mb-2">Tap an option to pair it with each item:</Text>
+              {(currentQ.answer_key?.pairs ?? []).map((pair: any, rowIndex: number) => {
+                const chosen = answers[currentQ.id]?.[rowIndex];
+                return (
+                  <View key={rowIndex} className="bg-slate-900 border border-slate-850 rounded-xl p-3 mb-2">
+                    <Text className="text-slate-200 text-sm mb-2">{pair.left}</Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {matchingChoices(currentQ).map((choice: string) => (
+                        <TouchableOpacity
+                          key={choice}
+                          onPress={() => handleMatchingChange(currentQ.id, rowIndex, choice)}
+                          className={`px-3 py-2 rounded-lg border ${
+                            chosen === choice
+                              ? 'bg-indigo-600/20 border-indigo-500'
+                              : 'bg-slate-950 border-slate-800'
+                          }`}
+                        >
+                          <Text className={chosen === choice ? 'text-indigo-300 text-xs font-semibold' : 'text-slate-400 text-xs'}>
+                            {choice}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* Short Answer Inputs */}
           {currentQ.qtype === 'short_answer' && (
