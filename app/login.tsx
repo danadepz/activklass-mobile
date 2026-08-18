@@ -12,14 +12,14 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   'auth/user-not-found': 'No account found with that identifier.',
   'auth/wrong-password': 'Incorrect identifier or password.',
   'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
-  'auth/invalid-email': 'That username format is not valid.',
+  'auth/invalid-email': 'That email address is not valid.',
 };
 
 export default function LoginScreen() {
   const router = useRouter();
   const { refreshProfile } = useAuth();
   
-  const [identifier, setIdentifier] = useState(''); // Can be email or p-<student_number>
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,18 +34,18 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
 
-    // Dynamic translation for parent username:
-    // If the input is p-<student_number> (e.g. p-20231015) and not a full email,
-    // translate it to the standard firebase auth email p-<student_number>@activklass.com
-    let loginEmail = identifier.trim();
+    /* Everyone signs in with a real email address.
+       The old p-<student_number> -> p-<student_number>@activklass.com
+       translation is gone: that scheme encoded exactly one parent per student,
+       and guardians now register with their own email and link by redeeming a
+       6-character code (see app/parent/details.tsx). Accounts created under the
+       old scheme still sign in — their p-...@activklass.com address is a real
+       address — they just have to type it in full. */
+    const loginEmail = identifier.trim().toLowerCase();
     if (!loginEmail.includes('@')) {
-      if (loginEmail.startsWith('p-')) {
-        loginEmail = `${loginEmail}@activklass.com`;
-      } else {
-        // Assume student is using their email or they typed their student ID.
-        // If they just typed a username/student ID without @, we might notify them,
-        // or for testing assume student email format. Let's just keep it as is.
-      }
+      setError('Please enter your full email address.');
+      setLoading(false);
+      return;
     }
 
     try {
@@ -136,12 +136,12 @@ export default function LoginScreen() {
             {/* Email/Username input */}
             <View>
               <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">
-                Email or Username
+                Email
               </Text>
               <TextInput
                 value={identifier}
                 onChangeText={setIdentifier}
-                placeholder="student@school.edu.ph or p-20231015"
+                placeholder="you@example.com"
                 placeholderTextColor="#64748b"
                 autoCapitalize="none"
                 keyboardType="email-address"

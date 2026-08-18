@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { collection, query, where, getDocs, doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { Svg, Circle } from 'react-native-svg';
 import { auth, db } from '../../src/config/firebase';
 import { useAuth, UserProfile } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
+import { GuardianLink, approveGuardian, getMyGuardians, revokeGuardian } from '../../src/lib/parent';
 
 // Interface for classes data structure in dashboard
 interface ClassItem {
@@ -23,7 +24,8 @@ export default function StudentDashboard() {
   
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [activeRemediations, setActiveRemediations] = useState<any[]>([]);
-  const [pendingConsent, setPendingConsent] = useState<any | null>(null);
+  const [pendingGuardians, setPendingGuardians] = useState<GuardianLink[]>([]);
+  const [consentBusy, setConsentBusy] = useState<string | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [overallGrade, setOverallGrade] = useState(90); // Default placeholder
@@ -85,38 +87,44 @@ export default function StudentDashboard() {
       setActiveRemediations(list);
     });
 
-    // 3. Fetch Pending Consent Record for Legal Age Students (>= 18)
-    const unsubscribeConsent = onSnapshot(doc(db, 'consent_records', user.uid), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const age = profile?.age || 0;
-        if (age >= 18 && data.status === 'pending') {
-          setPendingConsent(data);
-        } else {
-          setPendingConsent(null);
-        }
-      } else {
-        setPendingConsent(null);
-      }
-    });
-
     return () => {
       unsubscribeClasses();
       unsubscribeRemediations();
-      unsubscribeConsent();
     };
   }, [profile]);
 
-  const handleConsentAction = async (status: 'approved' | 'declined') => {
-    if (!auth.currentUser) return;
+  /* Guardians awaiting this student's approval.
+     Read from the API, not consent_records: the backend decides who is pending
+     (a minor's guardian never is), and guardian_links is write-denied to
+     clients so the device can no longer set its own consent status. */
+  const loadPendingGuardians = useCallback(async () => {
     try {
-      await updateDoc(doc(db, 'consent_records', auth.currentUser.uid), {
-        status,
-        signed_at: serverTimestamp(),
-      });
-      setPendingConsent(null);
+      const data = await getMyGuardians();
+      setPendingGuardians(
+        data.can_manage ? data.guardians.filter((g) => g.status !== 'approved') : []
+      );
     } catch (e) {
-      console.error('Error toggling consent status:', e);
+      console.error('[StudentDashboard] guardian links:', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPendingGuardians();
+    }, [loadPendingGuardians])
+  );
+
+  const handleConsentAction = async (link: GuardianLink, approve: boolean) => {
+    setConsentBusy(link.id);
+    try {
+      // There is no 'declined' state on a link -- declining is a revoke, which
+      // removes the connection outright.
+      await (approve ? approveGuardian(link.id) : revokeGuardian(link.id));
+      await loadPendingGuardians();
+    } catch (e) {
+      console.error('[StudentDashboard] consent action:', e);
+    } finally {
+      setConsentBusy(null);
     }
   };
 
@@ -194,30 +202,40 @@ export default function StudentDashboard() {
         </View>
 
         {/* Consent Alert Banner (Conditional) */}
-        {pendingConsent && (
-          <View className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-5 mt-5">
+        {pendingGuardians.map((link) => (
+          <View key={link.id} className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-5 mt-5">
             <Text className="text-amber-400 text-xs font-extrabold uppercase tracking-wider mb-2">
               🛡️ Consent Request (RA 10173)
             </Text>
             <Text className="text-slate-300 text-xs leading-normal mb-4">
-              Your guardian <Text className="font-semibold text-slate-200">{pendingConsent.parent_first_name} {pendingConsent.parent_last_name}</Text> is requesting access to view your academic record. Please approve or decline.
+              <Text className="font-semibold text-slate-200">
+                {link.guardian_name || link.guardian_email || 'A guardian'}
+              </Text>{' '}
+              is requesting access to view your academic record. You can choose exactly what they
+              see in Profile afterwards.
             </Text>
             <View className="flex-row gap-3">
               <TouchableOpacity
-                onPress={() => handleConsentAction('approved')}
+                onPress={() => handleConsentAction(link, true)}
+                disabled={consentBusy === link.id}
                 className="flex-1 bg-emerald-600 py-3 rounded-xl items-center"
               >
-                <Text className="text-white text-xs font-bold">Approve Access</Text>
+                {consentBusy === link.id ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-white text-xs font-bold">Approve Access</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => handleConsentAction('declined')}
+                onPress={() => handleConsentAction(link, false)}
+                disabled={consentBusy === link.id}
                 className="flex-1 bg-slate-900 border border-red-900/40 py-3 rounded-xl items-center"
               >
                 <Text className="text-red-400 text-xs font-bold">Decline</Text>
               </TouchableOpacity>
             </View>
           </View>
-        )}
+        ))}
 
         {/* Remediation Alert Banner (Conditional) */}
         {activeRemediations.length > 0 && (

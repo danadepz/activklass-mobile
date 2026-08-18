@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
+import { normaliseCode } from '../../src/lib/parent';
+
+// Six characters from the backend's SHARE_CODE_ALPHABET (app/models/identity.py),
+// which omits O/0/I/1 because these codes get read aloud and copied by hand.
+const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export default function ParentRegisterCodeScreen() {
   const router = useRouter();
@@ -21,54 +24,24 @@ export default function ParentRegisterCodeScreen() {
     setLoading(true);
     setError(null);
 
-    try {
-      // 1. Query consent_records to find the student matching the invitation code
-      const consentQuery = query(
-        collection(db, 'consent_records'),
-        where('invitation_code', '==', code.trim().toUpperCase())
+    /* Format check only.
+       Redeeming a code requires an authenticated parent account (the backend
+       gates /api/guardian-links/redeem on the parent role), so the code cannot
+       be looked up before sign-up. It is verified for real on the next screen,
+       right after the account is created. The old version queried
+       consent_records straight from the device — that collection no longer
+       drives linking, and an unauthenticated client cannot read it anyway. */
+    const cleaned = normaliseCode(code);
+    if (!CODE_PATTERN.test(cleaned)) {
+      setError(
+        'That code does not look right. It is 6 characters — letters and numbers, no O, 0, I or 1.'
       );
-      
-      const querySnapshot = await getDocs(consentQuery);
-      
-      if (querySnapshot.empty) {
-        setError('Invalid invitation code. Please ask your child for a new code.');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Extract consent record
-      const consentDoc = querySnapshot.docs[0];
-      const consentData = consentDoc.data();
-      const studentId = consentData.student_id;
-
-      // 3. Fetch student profile to verify identity
-      const studentProfileDoc = await getDoc(doc(db, 'users', studentId));
-      if (!studentProfileDoc.exists()) {
-        setError('Linked student profile not found in system database.');
-        setLoading(false);
-        return;
-      }
-
-      const studentData = studentProfileDoc.data();
-
-      // 4. Navigate to details collection page with student details
-      router.push({
-        pathname: '/parent/details',
-        params: {
-          studentId,
-          studentName: `${studentData.first_name} ${studentData.last_name}`,
-          studentNumber: studentData.student_number || 'Unknown',
-          yearLevel: studentData.year_level || 'Unknown',
-          inviteCode: code.trim().toUpperCase(),
-        }
-      });
-
-    } catch (err: any) {
-      console.error('[ParentRegister] Error verifying code:', err);
-      setError('Database verification failed. Check connection.');
-    } finally {
       setLoading(false);
+      return;
     }
+
+    router.push({ pathname: '/parent/details', params: { inviteCode: cleaned } });
+    setLoading(false);
   };
 
   return (

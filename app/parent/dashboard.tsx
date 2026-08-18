@@ -1,189 +1,103 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, SafeAreaView, Alert, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  SafeAreaView,
+  Alert,
+  Modal,
+  RefreshControl,
+} from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Svg, Circle } from 'react-native-svg';
-import { auth, db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
+import { errorMessage } from '../../src/lib/api';
+import {
+  DashboardChild,
+  getParentDashboard,
+  normaliseCode,
+  redeemGuardianCode,
+  studentFullName,
+} from '../../src/lib/parent';
 
-interface LinkedStudent {
-  student_id: string;
-  student_name: string;
-  student_number: string;
-  year_level: string;
-  status: 'approved' | 'pending' | 'declined';
-  is_minor: boolean;
-}
-
+/**
+ * Parent dashboard.
+ *
+ * Reads through the Flask API, not Firestore. The previous version listened to
+ * consent_records and wrote its own approval status from the device — a parent's
+ * phone deciding its own access level. guardian_links is write-denied to
+ * clients now; the minor/adult decision happens server-side.
+ *
+ * That also means no onSnapshot: the API is not realtime, so this refreshes on
+ * focus and on pull-to-refresh instead.
+ */
 export default function ParentDashboard() {
   const router = useRouter();
-  const { profile, logout } = useAuth();
-  
-  const [linkedStudents, setLinkedStudents] = useState<LinkedStudent[]>([]);
-  const [activeIdx, setActiveIdx] = useState<number>(0);
+  const { logout } = useAuth();
+
+  const [children, setChildren] = useState<DashboardChild[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [loading, setLoading] = useState(true);
-  
-  // Active child classes list
-  const [classes, setClasses] = useState<any[]>([]);
-  const [loadingClasses, setLoadingClasses] = useState(false);
-  
-  // Modals and inputs
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [showSwitchSheet, setShowSwitchSheet] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [submittingLink, setSubmittingLink] = useState(false);
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    // 1. Fetch all linked student consent records in real-time
-    const consentQuery = query(
-      collection(db, 'consent_records'),
-      where('parent_id', '==', user.uid)
-    );
-
-    const unsubscribeConsent = onSnapshot(consentQuery, async (snapshot) => {
-      const studentList: LinkedStudent[] = [];
-      
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        const studentId = data.student_id;
-        
-        // Fetch student profile to get current name and section registry
-        try {
-          const studentDoc = await getDoc(doc(db, 'users', studentId));
-          if (studentDoc.exists()) {
-            const studentData = studentDoc.data();
-            studentList.push({
-              student_id: studentId,
-              student_name: `${studentData.first_name} ${studentData.last_name}`,
-              student_number: studentData.student_number || 'Unknown',
-              year_level: studentData.year_level || studentData.grade_level || 'Grade 10',
-              status: data.status || 'pending',
-              is_minor: data.is_minor || false,
-            });
-          }
-        } catch (e) {
-          console.error('Error fetching student profile:', e);
-        }
-      }
-      
-      setLinkedStudents(studentList);
+  const load = useCallback(async () => {
+    try {
+      const data = await getParentDashboard();
+      setChildren(data.children);
+      setLoadError(null);
+      // Keep the selection in range if a link was revoked while we were away.
+      setActiveIdx((idx) => (idx < data.children.length ? idx : 0));
+    } catch (err) {
+      setLoadError(errorMessage(err, 'Could not load your children.'));
+    } finally {
       setLoading(false);
-    }, (err) => {
-      console.error('Consent listener error:', err);
-      setLoading(false);
-    });
-
-    return () => unsubscribeConsent();
+      setRefreshing(false);
+    }
   }, []);
 
-  // 2. Fetch classes of the currently active child if consent is approved
-  useEffect(() => {
-    if (linkedStudents.length === 0 || activeIdx >= linkedStudents.length) return;
-    const activeStudent = linkedStudents[activeIdx];
-    
-    if (activeStudent.status !== 'approved') {
-      setClasses([]);
-      return;
-    }
+  // Refresh whenever the screen regains focus — this is how a parent sees that
+  // their child just approved them, without a realtime listener.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
-    setLoadingClasses(true);
-    
-    // Query classes where active child's UID is in student_ids array
-    const classesQuery = query(
-      collection(db, 'classes'),
-      where('student_ids', 'array-contains', activeStudent.student_id)
-    );
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    load();
+  }, [load]);
 
-    const unsubscribeClasses = onSnapshot(classesQuery, async (snapshot) => {
-      const classList: any[] = [];
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        classList.push({
-          id: docSnap.id,
-          subject: data.subject || 'Unknown',
-          section: data.section || 'Unknown',
-          school_year: data.school_year || '2025-2026',
-        });
-      }
-      setClasses(classList);
-      setLoadingClasses(false);
-    }, (err) => {
-      console.error('Error listening to classes:', err);
-      setLoadingClasses(false);
-    });
-
-    return () => unsubscribeClasses();
-  }, [linkedStudents, activeIdx]);
-
-  // Handle adding another child link using invite code
   const handleLinkChild = async () => {
-    if (!inviteCodeInput.trim()) return;
-    const user = auth.currentUser;
-    if (!user || !profile) return;
+    const code = normaliseCode(inviteCodeInput);
+    if (!code) return;
 
     setSubmittingLink(true);
     try {
-      // Find matching invitation code in consent records
-      const consentQuery = query(
-        collection(db, 'consent_records'),
-        where('invitation_code', '==', inviteCodeInput.trim().toUpperCase())
-      );
-      
-      const querySnapshot = await getDocs(consentQuery);
-      
-      if (querySnapshot.empty) {
-        Alert.alert('Invalid Code', 'The invitation code is incorrect.');
-        setSubmittingLink(false);
-        return;
-      }
-
-      const docSnap = querySnapshot.docs[0];
-      const data = docSnap.data();
-
-      // Check if already linked
-      if (data.parent_id === user.uid) {
-        Alert.alert('Already Linked', 'This student is already linked to your account.');
-        setSubmittingLink(false);
-        return;
-      }
-
-      // Link parent details
-      await updateDoc(doc(db, 'consent_records', data.student_id), {
-        parent_id: user.uid,
-        parent_first_name: profile.first_name,
-        parent_last_name: profile.last_name,
-        status: data.is_minor ? 'approved' : 'pending', // Automatic approval for minor
-      });
-
-      Alert.alert('Link Success', 'Child account linked successfully.');
+      const link = await redeemGuardianCode(code);
       setShowAddChildModal(false);
       setInviteCodeInput('');
-      
-    } catch (e: any) {
-      console.error(e);
-      Alert.alert('Linking Failed', 'Firestore rules or network blocked link request.');
+      await load();
+      Alert.alert(
+        'Student linked',
+        link.status === 'approved'
+          ? 'You can now view their records.'
+          : 'Your child needs to approve the connection from their student portal before records unlock.'
+      );
+    } catch (err) {
+      Alert.alert('Could not link', errorMessage(err, 'That code did not work.'));
     } finally {
       setSubmittingLink(false);
-    }
-  };
-
-  // Re-request consent from adult child
-  const handleReRequestConsent = async () => {
-    if (linkedStudents.length === 0) return;
-    const activeStudent = linkedStudents[activeIdx];
-    try {
-      await updateDoc(doc(db, 'consent_records', activeStudent.student_id), {
-        status: 'pending',
-        signed_at: serverTimestamp()
-      });
-      Alert.alert('Re-requested', 'A consent confirmation request has been sent to your child.');
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'Failed to submit request.');
     }
   };
 
@@ -195,43 +109,51 @@ export default function ParentDashboard() {
     );
   }
 
-  const activeChild = linkedStudents[activeIdx];
+  const activeChild: DashboardChild | undefined = children[activeIdx];
+  const student = activeChild?.linked_student;
+  const summary = activeChild?.performance_summary;
+  const classes = activeChild?.classes ?? [];
+
   const radius = 40;
   const strokeWidth = 8;
   const circumference = 2 * Math.PI * radius;
+  const average = summary?.overall_grade_average ?? null;
+  // CHED point-scale averages land in 1.0-5.0, where a percentage ring would
+  // read as a near-empty circle. Only draw the ring for percentage grades.
+  const ringRatio = average != null && average > 5 ? Math.min(average / 100, 1) : null;
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
       <StatusBar style="light" />
-      
+
       {/* Header and Child Switch Selector */}
       <View className="px-6 pt-6 pb-4 border-b border-slate-900 bg-slate-950 flex-row justify-between items-center">
         <View className="flex-1 pr-3">
           <Text className="text-indigo-400 text-xs font-bold uppercase tracking-wider">Parent Portal</Text>
           {activeChild ? (
-            <TouchableOpacity 
-              onPress={() => setShowSwitchSheet(true)} 
+            <TouchableOpacity
+              onPress={() => setShowSwitchSheet(true)}
               className="flex-row items-center mt-1"
             >
               <Text className="text-white text-xl font-extrabold font-sans pr-1">
-                {activeChild.student_name}
+                {studentFullName(student)}
               </Text>
-              <Text className="text-indigo-400 text-sm">▼</Text>
+              {children.length > 1 && <Text className="text-indigo-400 text-sm">▼</Text>}
             </TouchableOpacity>
           ) : (
             <Text className="text-white text-xl font-extrabold font-sans mt-1">No Child Linked</Text>
           )}
         </View>
-        
+
         <View className="flex-row gap-2">
-          <TouchableOpacity 
-            onPress={() => setShowAddChildModal(true)} 
+          <TouchableOpacity
+            onPress={() => setShowAddChildModal(true)}
             className="px-3 py-2 bg-indigo-650 rounded-xl"
           >
             <Text className="text-white text-xs font-bold">+ Add Child</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={logout} 
+          <TouchableOpacity
+            onPress={logout}
             className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl"
           >
             <Text className="text-slate-400 text-xs font-bold">Logout</Text>
@@ -239,19 +161,28 @@ export default function ParentDashboard() {
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-6 py-4">
-        
-        {/* If no children linked */}
-        {linkedStudents.length === 0 ? (
+      <ScrollView
+        className="flex-1 px-6 py-4"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />
+        }
+      >
+        {loadError && (
+          <View className="bg-red-950/20 border border-red-500/20 rounded-2xl p-4 mt-4">
+            <Text className="text-red-300 text-xs leading-relaxed">{loadError}</Text>
+          </View>
+        )}
+
+        {children.length === 0 ? (
           <View className="bg-slate-900/40 border border-slate-850 rounded-2xl p-8 items-center justify-center my-20">
             <Text className="text-slate-500 text-3xl mb-4">🛡️</Text>
             <Text className="text-white text-base font-bold text-center">No Children Linked</Text>
             <Text className="text-slate-600 text-xs text-center mt-2 leading-relaxed max-w-xs">
-              Link your child's profile to view their class record grades and attendance. Click "+ Add Child" above and input their invitation code.
+              Link your child&apos;s profile to view their grades and attendance. Tap &quot;+ Add
+              Child&quot; above and enter the 6-character code from their student portal.
             </Text>
           </View>
-        ) : activeChild.status !== 'approved' ? (
-          
+        ) : activeChild.link_status !== 'approved' ? (
           /* DPA COMPLIANT ACCESS GATE / CONSENT RESTRICTION SCREEN */
           <View className="bg-slate-900 border border-slate-850 rounded-3xl p-6 mt-6 items-center">
             <View className="w-16 h-16 bg-red-950/20 border border-red-500/20 rounded-full items-center justify-center mb-4">
@@ -263,75 +194,99 @@ export default function ParentDashboard() {
             <Text className="text-slate-400 text-xs text-center mt-1">
               RA 10173 — Data Privacy Act of 2012
             </Text>
-            
+
             <View className="w-full bg-slate-950 p-4 rounded-xl border border-slate-850 my-6">
               <Text className="text-slate-300 text-xs font-medium leading-relaxed">
-                Because <Text className="font-bold text-indigo-400">{activeChild.student_name}</Text> is of legal age (18+), you must obtain explicit consent in their profile settings to view grades and records.
+                We need confirmation from{' '}
+                <Text className="font-bold text-indigo-400">{studentFullName(student)}</Text> before
+                sharing academic records. Please ask them to approve your connection from their
+                student portal profile page.
               </Text>
               <Text className="text-slate-500 text-[10px] mt-2">
-                Status: <Text className="font-semibold capitalize text-amber-400">{activeChild.status}</Text>
+                Status:{' '}
+                <Text className="font-semibold capitalize text-amber-400">
+                  {activeChild.link_status}
+                </Text>
               </Text>
             </View>
 
+            {/* Approval is the student's action, in their own portal. This only
+                re-reads the link status — the app can no longer set it. */}
             <TouchableOpacity
-              onPress={handleReRequestConsent}
+              onPress={onRefresh}
+              disabled={refreshing}
               className="w-full bg-indigo-600 py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/20"
             >
-              <Text className="text-white text-sm font-bold">Re-request Access</Text>
+              {refreshing ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text className="text-white text-sm font-bold">Refresh Status</Text>
+              )}
             </TouchableOpacity>
           </View>
-
         ) : (
-          
           /* APPROVED PORTAL: METRICS & CLASSES LIST */
           <View className="pb-10">
-            {/* Quick Metrics Summary */}
             <View className="bg-slate-900 border border-slate-850 rounded-3xl p-6 mt-6 flex-row items-center justify-between">
               <View className="flex-1 pr-4">
-                <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">Child Grade Standing</Text>
-                <Text className="text-white text-xl font-bold font-sans mt-2">Satisfactory Averages</Text>
-                <Text className="text-slate-500 text-[10px] mt-1">Registry: {activeChild.year_level} · ID {activeChild.student_number}</Text>
+                <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  Child Grade Standing
+                </Text>
+                <Text className="text-white text-xl font-bold font-sans mt-2">
+                  {average != null
+                    ? `${average} average`
+                    : activeChild.scopes.can_view_grades
+                      ? 'No grades yet'
+                      : 'Grades hidden'}
+                </Text>
+                <Text className="text-slate-500 text-[10px] mt-1">
+                  Registry: {student?.grade_level ?? '—'} · ID {student?.student_number ?? '—'}
+                </Text>
               </View>
-              
-              {/* Animated SVG Circle */}
+
               <View className="items-center justify-center relative">
                 <Svg width="100" height="100" viewBox="0 0 100 100">
-                  <Circle
-                    cx="50"
-                    cy="50"
-                    r={radius}
-                    stroke="#1e293b"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                  />
-                  <Circle
-                    cx="50"
-                    cy="50"
-                    r={radius}
-                    stroke="#10b981"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={circumference - (0.88 * circumference)} // Mock 88%
-                    strokeLinecap="round"
-                    transform="rotate(-90 50 50)"
-                  />
+                  <Circle cx="50" cy="50" r={radius} stroke="#1e293b" strokeWidth={strokeWidth} fill="none" />
+                  {ringRatio != null && (
+                    <Circle
+                      cx="50"
+                      cy="50"
+                      r={radius}
+                      stroke="#10b981"
+                      strokeWidth={strokeWidth}
+                      fill="none"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={circumference - ringRatio * circumference}
+                      strokeLinecap="round"
+                      transform="rotate(-90 50 50)"
+                    />
+                  )}
                 </Svg>
                 <View className="absolute items-center justify-center">
-                  <Text className="text-white text-base font-black">88%</Text>
-                  <Text className="text-slate-500 text-[8px] uppercase font-bold tracking-widest">GPA</Text>
+                  <Text className="text-white text-base font-black">
+                    {average != null ? average : '—'}
+                  </Text>
+                  <Text className="text-slate-500 text-[8px] uppercase font-bold tracking-widest">
+                    AVG
+                  </Text>
                 </View>
               </View>
             </View>
 
-            {/* Enrolled Classes List */}
+            {summary?.attendance_rate != null && (
+              <View className="bg-slate-900 border border-slate-850 rounded-2xl px-5 py-4 mt-4 flex-row justify-between items-center">
+                <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  Attendance Rate
+                </Text>
+                <Text className="text-white text-base font-bold">{summary.attendance_rate}%</Text>
+              </View>
+            )}
+
             <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-8 mb-4">
               Enrolled Course Sections ({classes.length})
             </Text>
 
-            {loadingClasses ? (
-              <ActivityIndicator size="small" color="#6366f1" className="my-8" />
-            ) : classes.length === 0 ? (
+            {classes.length === 0 ? (
               <View className="bg-slate-900/40 border border-slate-850 rounded-2xl p-8 items-center justify-center mt-2">
                 <Text className="text-slate-500 text-sm">No active enrolled classes found.</Text>
               </View>
@@ -339,19 +294,32 @@ export default function ParentDashboard() {
               <View className="space-y-4">
                 {classes.map((cls) => (
                   <TouchableOpacity
-                    key={cls.id}
-                    onPress={() => router.push({
-                      pathname: `/parent/class/${cls.id}`,
-                      params: { studentId: activeChild.student_id, studentName: activeChild.student_name }
-                    })}
+                    key={cls.class_id}
+                    onPress={() =>
+                      router.push({
+                        pathname: `/parent/class/${cls.class_id}`,
+                        params: {
+                          studentId: student?.id ?? '',
+                          studentName: studentFullName(student),
+                        },
+                      })
+                    }
                     activeOpacity={0.8}
                     className="bg-slate-900 border border-slate-850 p-5 rounded-2xl mt-4"
                   >
                     <View className="flex-row justify-between items-center">
                       <View className="flex-1 pr-3">
-                        <Text className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider">{cls.section}</Text>
-                        <Text className="text-white text-base font-bold font-sans mt-1">{cls.subject}</Text>
-                        <Text className="text-slate-500 text-[10px] mt-2">Academic Term Year: {cls.school_year}</Text>
+                        <Text className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider">
+                          {cls.section ?? '—'}
+                        </Text>
+                        <Text className="text-white text-base font-bold font-sans mt-1">
+                          {cls.subject ?? cls.subject_code ?? 'Class'}
+                        </Text>
+                        <Text className="text-slate-500 text-[10px] mt-2">
+                          {cls.current_grade != null
+                            ? `Current grade: ${cls.current_grade}`
+                            : 'No grade recorded yet'}
+                        </Text>
                       </View>
                       <Text className="text-indigo-400 text-lg font-bold">→</Text>
                     </View>
@@ -359,10 +327,8 @@ export default function ParentDashboard() {
                 ))}
               </View>
             )}
-
           </View>
         )}
-
       </ScrollView>
 
       {/* MODAL: Switch Child Sliding Sheet */}
@@ -382,9 +348,9 @@ export default function ParentDashboard() {
             </View>
 
             <ScrollView className="space-y-3 max-h-64">
-              {linkedStudents.map((std, i) => (
+              {children.map((child, i) => (
                 <TouchableOpacity
-                  key={std.student_id}
+                  key={child.link_id}
                   onPress={() => {
                     setActiveIdx(i);
                     setShowSwitchSheet(false);
@@ -394,10 +360,19 @@ export default function ParentDashboard() {
                   }`}
                 >
                   <View>
-                    <Text className="text-white text-sm font-bold">{std.student_name}</Text>
-                    <Text className="text-slate-400 text-xs mt-1">ID: {std.student_number} · {std.year_level}</Text>
+                    <Text className="text-white text-sm font-bold">
+                      {studentFullName(child.linked_student)}
+                    </Text>
+                    <Text className="text-slate-400 text-xs mt-1">
+                      ID: {child.linked_student.student_number ?? '—'} ·{' '}
+                      {child.linked_student.grade_level ?? '—'}
+                    </Text>
                   </View>
-                  {activeIdx === i && <Text className="text-indigo-400 text-xs font-bold">✓ Active</Text>}
+                  {child.link_status !== 'approved' ? (
+                    <Text className="text-amber-400 text-xs font-bold">Pending</Text>
+                  ) : (
+                    activeIdx === i && <Text className="text-indigo-400 text-xs font-bold">✓ Active</Text>
+                  )}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -416,15 +391,18 @@ export default function ParentDashboard() {
           <View className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6">
             <Text className="text-white text-xl font-bold mb-2">Link Student Record</Text>
             <Text className="text-slate-400 text-xs leading-normal mb-6">
-              Enter the unique invitation code generated on your child's profile screen to establish a parental connection.
+              Enter the 6-character code from your child&apos;s student portal to connect to their
+              records.
             </Text>
 
             <TextInput
               value={inviteCodeInput}
               onChangeText={setInviteCodeInput}
-              placeholder="Enter Code (e.g. AK123456)"
+              placeholder="Enter code (e.g. FXN9SJ)"
               placeholderTextColor="#64748b"
               autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={8}
               className="w-full bg-slate-950 border border-slate-850 p-4 rounded-xl text-white text-center text-base font-bold mb-6"
             />
 
@@ -454,7 +432,6 @@ export default function ParentDashboard() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
