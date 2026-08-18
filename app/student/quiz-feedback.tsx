@@ -4,6 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
+import {
+  correctAnswerText,
+  gradeQuiz,
+  normaliseLegacyAnswers,
+  studentAnswerText,
+  PerQuestion,
+} from '../../src/lib/quizGrading';
 
 export default function QuizFeedback() {
   const router = useRouter();
@@ -50,8 +57,25 @@ export default function QuizFeedback() {
     );
   }
 
-  const scorePct = Math.round((attempt.score / attempt.total_possible) * 100);
+  // total_score is the field the web feedback page and the teacher views read;
+  // `score` is the older mirror, kept as a fallback for attempts written before
+  // both names were stored.
+  const totalScore = attempt.total_score ?? attempt.score ?? 0;
+  const scorePct = Math.round((attempt.score_ratio ?? 0) * 100);
   const isPassed = scorePct >= 75;
+  const isPending = Boolean(attempt.has_essays_pending);
+
+  // The breakdown now comes from the attempt itself, exactly as the web page
+  // reads it, so a phone and a browser show the same marks for the same
+  // submission. Attempts written before per_question existed are re-graded here
+  // from their stored answers -- legacy mobile encodings normalised first.
+  const legacyAnswers = normaliseLegacyAnswers(quiz, attempt.answers);
+  const perQuestion: PerQuestion[] = attempt.per_question?.length
+    ? attempt.per_question
+    : gradeQuiz(quiz, legacyAnswers).per_question;
+  const byId: Record<string, PerQuestion> = Object.fromEntries(
+    perQuestion.map((p) => [p.id, p])
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
@@ -68,21 +92,37 @@ export default function QuizFeedback() {
         {/* Score Summary Card */}
         <View className="bg-slate-900 border border-slate-850 rounded-3xl p-6 mt-3 mb-6 items-center">
           <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider text-center">Your Final Marks</Text>
-          <Text className="text-white text-5xl font-black mt-3 font-sans">{attempt.score}/{attempt.total_possible}</Text>
-          
-          {/* Status Badge */}
+          <Text className="text-white text-5xl font-black mt-3 font-sans">{totalScore}/{attempt.total_possible}</Text>
+
+          {/* Status Badge. An attempt with essays still in the teacher's queue is
+              neither passed nor failed yet -- the same three-way descriptor the
+              web feedback page shows. */}
           <View className={`px-4 py-1.5 rounded-full mt-4 border ${
-            isPassed 
-              ? 'bg-emerald-500/10 border-emerald-500/30' 
-              : 'bg-amber-500/10 border-amber-500/30'
+            isPending
+              ? 'bg-indigo-500/10 border-indigo-500/30'
+              : isPassed
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
           }`}>
-            <Text className={`text-xs font-bold uppercase ${isPassed ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {isPassed ? 'Passed' : 'Needs Remediation'}
+            <Text className={`text-xs font-bold uppercase ${
+              isPending ? 'text-indigo-400' : isPassed ? 'text-emerald-400' : 'text-amber-400'
+            }`}>
+              {isPending ? 'Awaiting Essay Review' : isPassed ? 'Passed' : 'Needs Remediation'}
             </Text>
           </View>
-          
+
           <Text className="text-slate-500 text-[10px] mt-3 font-semibold uppercase tracking-widest">{scorePct}% Overall Percentage</Text>
         </View>
+
+        {isPending && (
+          <View className="bg-indigo-950/20 border border-indigo-900/30 p-4 rounded-xl mb-6">
+            <Text className="text-slate-300 text-xs leading-relaxed">
+              ⏳ <Text className="font-semibold text-slate-200">Not final yet:</Text> your objective
+              answers are graded automatically. Essay questions are awaiting your teacher&apos;s
+              review, so your score may rise once they are marked.
+            </Text>
+          </View>
+        )}
 
         {/* Warning notification regarding backtracking and review restrictions (Conditional) */}
         {quiz.prevent_backtracking && (
@@ -99,47 +139,31 @@ export default function QuizFeedback() {
             <Text className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-4">Question Breakdown</Text>
             
             {quiz.questions.map((q: any, idx: number) => {
-              const studentAnswer = attempt.answers[q.id];
-              let isCorrect = false;
+              // Marks come from the attempt's per_question row rather than being
+              // recomputed here. Recomputing meant this screen and the web one
+              // could disagree about the same submission, and it silently
+              // treated matching and every unhandled type as wrong.
+              const pq = byId[q.id];
+              const isPendingItem = Boolean(pq?.pending);
+              const isCorrect = Boolean(pq?.correct);
+              const earned = pq?.earned ?? 0;
+              const possible = pq?.possible ?? q.points ?? 0;
 
-              // Check if correct
-              if (q.qtype === 'mcq') {
-                const correctOpt = q.options?.find((opt: any) => opt.is_correct);
-                isCorrect = correctOpt && studentAnswer === correctOpt.id;
-              } else if (q.qtype === 'true_false') {
-                const correctVal = q.answer_key?.value;
-                const parsedAnswer = studentAnswer === 'True' ? true : studentAnswer === 'False' ? false : null;
-                isCorrect = parsedAnswer === correctVal;
-              } else if (q.qtype === 'short_answer') {
-                const accepted = q.answer_key?.answers || [];
-                const cleanAns = (studentAnswer || '').trim().toLowerCase();
-                isCorrect = accepted.some((a: string) => a.trim().toLowerCase() === cleanAns);
-              }
-
-              // Get student response label
-              let responseLabel = studentAnswer || 'No response';
-              if (q.qtype === 'mcq' && studentAnswer) {
-                const chosenOpt = q.options?.find((opt: any) => opt.id === studentAnswer);
-                responseLabel = chosenOpt ? chosenOpt.text : studentAnswer;
-              }
-
-              // Get correct response label
-              let correctLabel = '';
-              if (q.qtype === 'mcq') {
-                const correctOpt = q.options?.find((opt: any) => opt.is_correct);
-                correctLabel = correctOpt ? correctOpt.text : '';
-              } else if (q.qtype === 'true_false') {
-                correctLabel = q.answer_key?.value ? 'True' : 'False';
-              } else if (q.qtype === 'short_answer') {
-                correctLabel = q.answer_key?.answers?.[0] || '';
-              }
+              const responseLabel = studentAnswerText(q, legacyAnswers[q.id]);
+              const correctLabel = correctAnswerText(q);
 
               return (
                 <View key={q.id} className="bg-slate-900 border border-slate-850 p-5 rounded-2xl mt-4">
                   <View className="flex-row justify-between items-center mb-3">
-                    <Text className="text-slate-400 text-xs font-bold">Item {idx + 1}</Text>
-                    
-                    {q.qtype === 'essay' ? (
+                    <View className="flex-row items-center">
+                      <Text className="text-slate-400 text-xs font-bold">Item {idx + 1}</Text>
+                      {/* Points earned, the same figure the web breakdown shows. */}
+                      <Text className="text-slate-500 text-[10px] font-mono font-bold ml-2">
+                        {earned}/{possible} pts
+                      </Text>
+                    </View>
+
+                    {isPendingItem ? (
                       <View className="bg-indigo-600/10 px-2 py-0.5 rounded">
                         <Text className="text-indigo-400 text-[9px] font-bold uppercase">Pending Essay Review</Text>
                       </View>
@@ -158,11 +182,15 @@ export default function QuizFeedback() {
                   {/* Answers review */}
                   <View className="bg-slate-950/40 p-3 rounded-xl border border-slate-850 space-y-1">
                     <Text className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Your Answer:</Text>
-                    <Text className={`text-xs ${isCorrect ? 'text-emerald-400' : 'text-red-400'} font-semibold mt-0.5`}>
+                    <Text
+                      className={`text-xs font-semibold mt-0.5 ${
+                        isPendingItem ? 'text-slate-200' : isCorrect ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
                       {responseLabel}
                     </Text>
-                    
-                    {!isCorrect && q.qtype !== 'essay' && (
+
+                    {!isCorrect && !isPendingItem && (
                       <View className="mt-2 pt-2 border-t border-slate-900/60">
                         <Text className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Correct Answer:</Text>
                         <Text className="text-slate-300 text-xs font-semibold mt-0.5">
@@ -173,7 +201,7 @@ export default function QuizFeedback() {
                   </View>
 
                   {/* AI Explanation Panel (only for incorrect objective answers) */}
-                  {!isCorrect && q.qtype !== 'essay' && q.explanation && (
+                  {!isCorrect && !isPendingItem && q.explanation && (
                     <View className="bg-indigo-950/15 border border-indigo-900/25 p-4 rounded-xl mt-4">
                       <Text className="text-indigo-400 text-[10px] font-black uppercase tracking-wider mb-2">
                         ✨ AI Concept Explanation
