@@ -152,7 +152,13 @@ export default function QuizPlayer() {
         quiz_id: quizId,
         class_id: quiz.class_id,
         student_id: user.uid,
+        // Both names are required. `score` is the documented quiz_attempts
+        // field; `total_score` is what every teacher-side view actually reads
+        // (scaffolds mastery, quiz results stats, class history). Writing only
+        // `score` makes a mobile attempt invisible to the teacher -- it is
+        // skipped outright by the mastery calculation.
         score,
+        total_score: score,
         total_possible: totalPossible,
         score_ratio: score / totalPossible,
         module_id: quiz.module_id || 'm1',
