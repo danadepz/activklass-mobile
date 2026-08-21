@@ -175,9 +175,20 @@ export default function QuizPlayer() {
       setTimeLeft(now);
       if (now !== null && now <= 0) {
         if (timerRef.current) clearInterval(timerRef.current);
-        Alert.alert('Time Up', 'Your quiz timer has expired. Submitting your current answers.', [
-          { text: 'OK', onPress: () => autoSubmit() },
-        ]);
+        /* Submit FIRST, then tell them.
+
+           This used to be Alert.alert(..., [{ text: 'OK', onPress: () =>
+           autoSubmit() }]), which is not an auto-submission: nothing was
+           written until the student tapped OK. A student who had put the
+           phone down, taken a call, or walked away at the wrong moment was
+           left with an attempt stuck in_progress and every answer still only
+           in React state -- and the deadline is anchored to the server clock,
+           so the time was gone either way.
+
+           The web player has always submitted without asking. A timer that
+           ends the exam should not also require a tap to bank the work. */
+        autoSubmit();
+        Alert.alert('Time Up', 'Your time has run out. Your answers have been submitted.');
       }
     }, 1000);
 
