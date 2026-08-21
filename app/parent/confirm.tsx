@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
@@ -17,58 +18,64 @@ export default function ParentConfirmScreen() {
 
   const email = String(params.email ?? '');
   const linkStatus = String(params.linkStatus ?? 'pending');
+  const studentName = String(params.studentName ?? '').trim() || 'your child';
   const approved = linkStatus === 'approved';
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-950">
-      <StatusBar style="light" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="px-6 py-10 justify-between">
+    <SafeAreaView className="flex-1 bg-canvas">
+      <StatusBar style="auto" />
+      {/* Padding and justify-between belong to the CONTENT container, not the
+          ScrollView. React Native throws a render error for child layout props
+          set on the scroll view itself, and NativeWind was compiling the
+          className straight onto it. flex-grow replaces the old
+          contentContainerStyle={{ flexGrow: 1 }}, which did the same job. */}
+      <ScrollView contentContainerClassName="flex-grow px-6 py-10 justify-between">
         <View className="items-center mt-12">
           <View
             className={`w-16 h-16 rounded-full items-center justify-center shadow-lg ${
               approved
-                ? 'bg-emerald-600 shadow-emerald-500/20'
-                : 'bg-amber-600 shadow-amber-500/20'
+                ? 'bg-success shadow-emerald-500/20'
+                : 'bg-warning shadow-amber-500/20'
             }`}
           >
-            <Text className="text-white text-3xl font-bold">{approved ? '✓' : '⏳'}</Text>
+            <Text className="text-on-accent text-3xl font-bold">{approved ? '✓' : '⏳'}</Text>
           </View>
-          <Text className="text-white text-3xl font-extrabold mt-6 tracking-tight text-center font-sans">
+          <Text className="text-ink text-3xl font-extrabold mt-6 tracking-tight text-center font-sans">
             {approved ? 'You’re All Set' : 'Almost There'}
           </Text>
-          <Text className="text-slate-400 text-sm mt-2 text-center font-sans">
+          <Text className="text-ink-muted text-sm mt-2 text-center font-sans">
             {approved
-              ? 'Your account is ready and your child’s records are available.'
-              : 'Your account is ready. Your child needs to approve the connection.'}
+              ? `Your account is ready and ${studentName}’s records are available.`
+              : `Your account is ready. ${studentName} needs to approve the connection.`}
           </Text>
         </View>
 
-        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-6 my-8">
-          <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider text-center mb-4">
+        <View className="bg-surface border border-hairline rounded-3xl p-6 my-8">
+          <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider text-center mb-4">
             Sign in with
           </Text>
-          <View className="bg-slate-950 p-4 rounded-xl border border-slate-850">
-            <Text className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+          <View className="bg-sunken p-4 rounded-xl border border-hairline">
+            <Text className="text-ink-faint text-[10px] uppercase font-bold tracking-wider">
               Email
             </Text>
-            <Text className="text-indigo-400 text-base font-extrabold mt-1 font-mono">
+            <Text className="text-accent-text text-base font-extrabold mt-1 font-mono">
               {email || 'your email'}
             </Text>
           </View>
-          <Text className="text-slate-500 text-[11px] mt-4 leading-relaxed text-center">
+          <Text className="text-ink-faint text-[11px] mt-4 leading-relaxed text-center">
             Use the password you just chose. There is no temporary password to write down.
           </Text>
         </View>
 
         {!approved && (
           <View className="bg-amber-950/20 border border-amber-900/30 p-5 rounded-2xl mb-8">
-            <Text className="text-amber-400 text-xs font-extrabold uppercase tracking-wider mb-2">
+            <Text className="text-warning text-xs font-extrabold uppercase tracking-wider mb-2">
               Waiting for approval
             </Text>
-            <Text className="text-slate-300 text-xs leading-relaxed">
+            <Text className="text-ink-soft text-xs leading-relaxed">
               Under the Data Privacy Act (RA 10173), a student aged 18 or over decides who sees
-              their records. Ask your child to open their student portal profile and approve your
-              connection. You can check again from your dashboard at any time.
+              their records. Ask {studentName} to open their student portal profile and approve
+              your connection. You can check again from your dashboard at any time.
             </Text>
           </View>
         )}
@@ -77,9 +84,9 @@ export default function ParentConfirmScreen() {
           <TouchableOpacity
             onPress={() => router.replace('/parent/dashboard')}
             activeOpacity={0.8}
-            className="w-full bg-indigo-600 py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/25"
+            className="w-full bg-accent py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/25"
           >
-            <Text className="text-white text-base font-bold font-sans">Go to Dashboard</Text>
+            <Text className="text-on-accent text-base font-bold font-sans">Go to Dashboard</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

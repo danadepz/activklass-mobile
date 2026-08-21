@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { updatePassword, signOut } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
+import { useThemeColors } from '../../src/theme';
 
 export default function ParentChangePassScreen() {
+  const c = useThemeColors();
+  useRequireAuth();
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
 
@@ -80,25 +85,30 @@ export default function ParentChangePassScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-950">
-      <StatusBar style="light" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="px-6 py-10 justify-between">
+    <SafeAreaView className="flex-1 bg-canvas">
+      <StatusBar style="auto" />
+      {/* Padding and justify-between belong to the CONTENT container, not the
+          ScrollView. React Native throws a render error for child layout props
+          set on the scroll view itself, and NativeWind was compiling the
+          className straight onto it. flex-grow replaces the old
+          contentContainerStyle={{ flexGrow: 1 }}, which did the same job. */}
+      <ScrollView contentContainerClassName="flex-grow px-6 py-10 justify-between">
         
         {/* Header */}
         <View className="mb-6 mt-6">
-          <Text className="text-white text-3xl font-extrabold font-sans">
+          <Text className="text-ink text-3xl font-extrabold font-sans">
             Set New Password
           </Text>
-          <Text className="text-slate-400 text-sm mt-2 font-sans">
+          <Text className="text-ink-muted text-sm mt-2 font-sans">
             Update your password to secure your account.
           </Text>
         </View>
 
         {/* Security Warning Notice — only true when they were sent here. */}
         {isForced && (
-          <View className="bg-indigo-950/20 border border-indigo-900/30 p-4 rounded-xl mb-6">
-            <Text className="text-slate-300 text-xs leading-relaxed">
-              🔒 <Text className="font-semibold text-slate-200">First-Time Setup:</Text> You are currently logged in with a temporary password. You must configure a new, personal password to access your child&apos;s student records.
+          <View className="bg-indigo-950/20 border border-accent/30 p-4 rounded-xl mb-6">
+            <Text className="text-ink-soft text-xs leading-relaxed">
+              🔒 <Text className="font-semibold text-ink-soft">First-Time Setup:</Text> You are currently logged in with a temporary password. You must configure a new, personal password to access your child&apos;s student records.
             </Text>
           </View>
         )}
@@ -108,7 +118,7 @@ export default function ParentChangePassScreen() {
           
           {error && (
             <View className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl mb-4">
-              <Text className="text-red-400 text-xs font-semibold">
+              <Text className="text-danger text-xs font-semibold">
                 {error}
               </Text>
             </View>
@@ -116,31 +126,31 @@ export default function ParentChangePassScreen() {
 
           {/* New Password */}
           <View>
-            <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">
+            <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
               New Password
             </Text>
             <TextInput
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="Minimum 6 characters"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={c.inkFaint}
               secureTextEntry
-              className="w-full bg-slate-900 border border-slate-850 p-4 rounded-xl text-white text-sm focus:border-indigo-500"
+              className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-sm focus:border-accent"
             />
           </View>
 
           {/* Confirm Password */}
           <View className="mt-4">
-            <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">
+            <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
               Confirm Password
             </Text>
             <TextInput
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Re-enter new password"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={c.inkFaint}
               secureTextEntry
-              className="w-full bg-slate-900 border border-slate-850 p-4 rounded-xl text-white text-sm focus:border-indigo-500"
+              className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-sm focus:border-accent"
             />
           </View>
 
@@ -152,12 +162,12 @@ export default function ParentChangePassScreen() {
             onPress={handleUpdatePassword}
             disabled={loading}
             activeOpacity={0.8}
-            className="w-full bg-indigo-600 py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/25"
+            className="w-full bg-accent py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/25"
           >
             {loading ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text className="text-white text-base font-bold font-sans">
+              <Text className="text-on-accent text-base font-bold font-sans">
                 Update Password &amp; Continue
               </Text>
             )}
@@ -177,7 +187,7 @@ export default function ParentChangePassScreen() {
             disabled={loading}
             className="w-full items-center justify-center mt-4"
           >
-            <Text className="text-slate-400 text-sm font-semibold">
+            <Text className="text-ink-muted text-sm font-semibold">
               {isForced ? 'Sign Out' : 'Cancel'}
             </Text>
           </TouchableOpacity>

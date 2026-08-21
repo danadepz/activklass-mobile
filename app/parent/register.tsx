@@ -1,19 +1,47 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { normaliseCode } from '../../src/lib/parent';
+import {
+  CODE_LENGTH,
+  GuardianCodeDoc,
+  GuardianCodeError,
+  lookupGuardianCode,
+  normaliseCode,
+} from '../../src/lib/guardianCodes';
+import { useThemeColors } from '../../src/theme';
 
-// Six characters from the backend's SHARE_CODE_ALPHABET (app/models/identity.py),
-// which omits O/0/I/1 because these codes get read aloud and copied by hand.
-const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/;
-
+/**
+ * Step 1 of guardian sign-up: the child's code, checked for real.
+ *
+ * The previous version only regex-checked the shape and sent everyone to the
+ * form regardless, because redeeming needed an authenticated parent — so a
+ * wrong code was not caught until after the account had been created. The code
+ * now lives in Firestore keyed by the code itself, which a device with no
+ * account can read, so an invalid code stops here.
+ *
+ * A match is confirmed rather than assumed: mistyping one character of a valid
+ * code can land on a real but different student, and the only person who can
+ * catch that is the guardian looking at the name.
+ */
 export default function ParentRegisterCodeScreen() {
+  const c = useThemeColors();
   const router = useRouter();
-  
+
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [match, setMatch] = useState<GuardianCodeDoc | null>(null);
 
   const handleVerifyCode = async () => {
     if (!code.trim()) {
@@ -23,107 +51,204 @@ export default function ParentRegisterCodeScreen() {
 
     setLoading(true);
     setError(null);
+    setMatch(null);
 
-    /* Format check only.
-       Redeeming a code requires an authenticated parent account (the backend
-       gates /api/guardian-links/redeem on the parent role), so the code cannot
-       be looked up before sign-up. It is verified for real on the next screen,
-       right after the account is created. The old version queried
-       consent_records straight from the device — that collection no longer
-       drives linking, and an unauthenticated client cannot read it anyway. */
-    const cleaned = normaliseCode(code);
-    if (!CODE_PATTERN.test(cleaned)) {
-      setError(
-        'That code does not look right. It is 6 characters — letters and numbers, no O, 0, I or 1.'
-      );
+    try {
+      setMatch(await lookupGuardianCode(code));
+    } catch (err: any) {
+      if (err instanceof GuardianCodeError) {
+        setError(err.message);
+      } else if (err?.code === 'permission-denied') {
+        setError('Could not check that code right now. Please try again in a moment.');
+      } else {
+        setError('Could not reach the server. Check your connection and try again.');
+      }
+    } finally {
       setLoading(false);
-      return;
     }
+  };
 
-    router.push({ pathname: '/parent/details', params: { inviteCode: cleaned } });
-    setLoading(false);
+  const handleContinue = () => {
+    if (!match) return;
+    router.push({
+      pathname: '/parent/details',
+      params: {
+        inviteCode: match.code,
+        studentUid: match.student_uid,
+        studentName: match.student_name,
+        studentNumber: match.student_number ?? '',
+        gradeLevel: match.grade_level ?? '',
+        // '' rather than 'null' — an unknown birthdate must reach details.tsx as
+        // unknown, and String(null) would arrive as the literal text 'null'.
+        isMinor: match.is_minor == null ? '' : String(match.is_minor),
+      },
+    });
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-950">
-      <StatusBar style="light" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="px-6 py-10 justify-between">
-        
-        {/* Back Button */}
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          className="self-start w-10 h-10 items-center justify-center bg-slate-900 border border-slate-800 rounded-xl"
+    <SafeAreaView className="flex-1 bg-canvas">
+      <StatusBar style="auto" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1"
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          className="px-6 py-10"
+          keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-white text-lg font-bold">←</Text>
-        </TouchableOpacity>
+          {/* Back Button */}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="self-start w-10 h-10 items-center justify-center bg-surface border border-hairline rounded-xl"
+          >
+            <Text className="text-ink text-lg font-bold">←</Text>
+          </TouchableOpacity>
 
-        {/* Central Card */}
-        <View className="my-auto">
-          {/* Header */}
-          <View className="mb-8">
-            <Text className="text-white text-3xl font-extrabold font-sans">
-              Parent Connection
-            </Text>
-            <Text className="text-slate-400 text-sm mt-2 font-sans">
-              Enter the unique invitation code generated by your child from their student portal profile.
-            </Text>
-          </View>
+          <View className="flex-1 justify-center py-8">
+            {/* Header */}
+            <View className="mb-8">
+              <Text className="text-accent-text text-xs font-bold uppercase tracking-widest mb-2">
+                Step 1 of 2
+              </Text>
+              <Text className="text-ink text-3xl font-extrabold font-sans">Parent Connection</Text>
+              <Text className="text-ink-muted text-sm mt-2 font-sans leading-relaxed">
+                Enter the unique invitation code generated by your child from their student portal
+                profile.
+              </Text>
+            </View>
 
-          {/* Form */}
-          <View className="space-y-4">
-            
             {/* Error Message */}
             {error && (
               <View className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl mb-4">
-                <Text className="text-red-400 text-xs font-semibold leading-relaxed">
-                  {error}
-                </Text>
+                <Text className="text-danger text-xs font-semibold leading-relaxed">{error}</Text>
               </View>
             )}
 
             {/* Code Input */}
             <View>
-              <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">
+              <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
                 Invitation Code
               </Text>
               <TextInput
                 value={code}
-                onChangeText={setCode}
+                onChangeText={(text) => {
+                  // Normalise as they type: codes get read aloud, so people
+                  // type them lowercase and with spaces between the groups.
+                  setCode(normaliseCode(text).slice(0, CODE_LENGTH));
+                  // A confirmed match must not survive an edit of the code
+                  // that produced it.
+                  if (match) setMatch(null);
+                  if (error) setError(null);
+                }}
                 placeholder="e.g. XY89Z2"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={c.inkFaint}
                 autoCapitalize="characters"
-                maxLength={10}
-                className="w-full bg-slate-900 border border-slate-850 p-4 rounded-xl text-white text-center text-lg font-bold focus:border-indigo-500"
+                autoCorrect={false}
+                maxLength={CODE_LENGTH * 2}
+                editable={!loading}
+                returnKeyType="go"
+                onSubmitEditing={handleVerifyCode}
+                className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-center text-2xl font-bold tracking-[8px]"
               />
+              <Text className="text-ink-faint text-[10px] text-center mt-2">
+                6 characters · no O, 0, I or 1
+              </Text>
             </View>
 
-            {/* Continue Button */}
-            <TouchableOpacity
-              onPress={handleVerifyCode}
-              disabled={loading}
-              activeOpacity={0.8}
-              className="w-full bg-indigo-600 py-4 rounded-xl items-center justify-center mt-6"
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text className="text-white text-base font-bold font-sans">
-                  Verify &amp; Continue
+            {/* Confirmed match — the guardian checks the name before continuing */}
+            {match && (
+              <View className="bg-emerald-500/5 border border-emerald-500/30 rounded-2xl p-5 mt-6">
+                <Text className="text-success text-[10px] font-bold uppercase tracking-widest">
+                  ✓ Code accepted
                 </Text>
-              )}
+                <Text className="text-on-accent text-lg font-bold font-sans mt-2">
+                  {match.student_name}
+                </Text>
+                <Text className="text-ink-muted text-xs mt-1">
+                  {match.grade_level ? `${match.grade_level} · ` : ''}
+                  {match.student_number ? `ID ${match.student_number}` : 'Student'}
+                </Text>
+                <Text className="text-ink-faint text-[11px] leading-relaxed mt-3">
+                  Is this your child? If the name is not right, go back and check the code — one
+                  wrong character can match a different student.
+                </Text>
+              </View>
+            )}
+
+            {/* Primary action */}
+            {match ? (
+              <View className="mt-6">
+                <TouchableOpacity
+                  onPress={handleContinue}
+                  activeOpacity={0.8}
+                  className="w-full bg-accent py-4 rounded-xl items-center justify-center shadow-lg shadow-indigo-600/25"
+                >
+                  <Text className="text-on-accent text-base font-bold font-sans">
+                    Yes, continue to sign-up
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setMatch(null);
+                    setCode('');
+                  }}
+                  className="w-full py-3 items-center justify-center mt-2"
+                >
+                  <Text className="text-ink-muted text-xs font-semibold">
+                    That is not my child — try another code
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={handleVerifyCode}
+                disabled={loading || code.length < CODE_LENGTH}
+                activeOpacity={0.8}
+                className={`w-full py-4 rounded-xl items-center justify-center mt-6 ${
+                  code.length < CODE_LENGTH ? 'bg-accent/30' : 'bg-accent'
+                }`}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text
+                    className={`text-base font-bold font-sans ${
+                      code.length < CODE_LENGTH ? 'text-ink/50' : 'text-ink'
+                    }`}
+                  >
+                    Verify Code
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Already registered — a second child is added from the dashboard,
+                not by signing up again with a different code. */}
+            <TouchableOpacity
+              onPress={() => router.push('/login')}
+              className="w-full py-4 items-center justify-center mt-2"
+            >
+              <Text className="text-ink-faint text-xs">
+                Already have a parent account?{' '}
+                <Text className="text-accent-text font-semibold">
+                  Sign in and use &quot;+ Add Child&quot;
+                </Text>
+              </Text>
             </TouchableOpacity>
-
           </View>
-        </View>
 
-        {/* Guidance Footer */}
-        <View className="bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl">
-          <Text className="text-slate-400 text-xs leading-relaxed text-center">
-            💡 <Text className="font-semibold text-slate-300">How to get the code:</Text> Have your child sign in to the ActivKlass app on their device, open their <Text className="text-indigo-400">Profile</Text>, and copy the alphanumeric code under <Text className="text-indigo-400">Parental Access</Text>.
-          </Text>
-        </View>
-
-      </ScrollView>
+          {/* Guidance Footer */}
+          <View className="bg-surface/40 border border-hairline/60 p-4 rounded-2xl">
+            <Text className="text-ink-muted text-xs leading-relaxed text-center">
+              💡 <Text className="font-semibold text-ink-soft">How to get the code:</Text> Have your
+              child sign in to the ActivKlass app on their device, open their{' '}
+              <Text className="text-accent-text">Profile</Text>, and copy the code under{' '}
+              <Text className="text-accent-text">Parental Access</Text>.
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -129,83 +129,14 @@ export interface AnalyticsPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Linking
+// Linking lives in Firestore, not here
 // ---------------------------------------------------------------------------
-
-/**
- * Redeem a student's 6-character code.
- *
- * The returned status is the whole story for the next screen: a minor's
- * guardian comes back `approved` and can go straight to the dashboard, while
- * an adult student's guardian comes back `pending` and must wait for approval.
- * The backend decides which — never the client.
- */
-export function redeemGuardianCode(code: string, relationshipType?: string) {
-  return api<GuardianLink>('/api/guardian-links/redeem', {
-    method: 'POST',
-    body: { code, relationship_type: relationshipType || null },
-  });
-}
-
-export function listLinkedChildren() {
-  return api<
-    {
-      link_id: string;
-      status: LinkStatus;
-      student: LinkedStudent;
-      scopes: GuardianScopes;
-    }[]
-  >('/api/guardian-links/children');
-}
-
-// ---------------------------------------------------------------------------
-// Student side: my code, my guardians
-// ---------------------------------------------------------------------------
-
-export interface GuardianCode {
-  code: string;
-  created_at: string | null;
-  rotated_at: string | null;
-}
-
-export interface MyGuardiansPayload {
-  /** null when the birthdate is unknown; the backend then treats them as an adult. */
-  is_minor: boolean | null;
-  /** false for under-18s: render the toggles and revoke disabled, not hidden. */
-  can_manage: boolean;
-  locked_reason: string | null;
-  scope_labels: { key: keyof GuardianScopes; label: string }[];
-  guardians: GuardianLink[];
-}
-
-/** The student's share code. The backend creates it on first call. */
-export function getMyGuardianCode() {
-  return api<GuardianCode>('/api/guardian-links/code');
-}
-
-/**
- * Mint a new code. Guardians already connected stay connected — rotating only
- * stops anyone still holding the old code from redeeming it.
- */
-export function rotateMyGuardianCode() {
-  return api<GuardianCode>('/api/guardian-links/code/rotate', { method: 'POST' });
-}
-
-export function getMyGuardians() {
-  return api<MyGuardiansPayload>('/api/guardian-links');
-}
-
-export function setGuardianScopes(linkId: string, scopes: Partial<GuardianScopes>) {
-  return api<GuardianLink>(`/api/guardian-links/${linkId}`, { method: 'PATCH', body: scopes });
-}
-
-export function approveGuardian(linkId: string) {
-  return api<GuardianLink>(`/api/guardian-links/${linkId}/approve`, { method: 'POST' });
-}
-
-export function revokeGuardian(linkId: string) {
-  return api<{ status: string; id: string }>(`/api/guardian-links/${linkId}`, { method: 'DELETE' });
-}
+// Redeeming a code, listing children, minting/rotating a student's code, and
+// the approve/scope/revoke actions all moved to src/lib/guardianCodes.ts. The
+// reason is in that file's header: a guardian has no account when they type a
+// code, so an API gated on the parent role could never check one before
+// sign-up. The types above are still shared, and the portal reads below still
+// go through Flask because an attendance document holds the whole class.
 
 // ---------------------------------------------------------------------------
 // Portal data
@@ -245,9 +176,4 @@ export function getAnalytics(studentId: string) {
 export function studentFullName(student: LinkedStudent | null | undefined): string {
   if (!student) return 'Your child';
   return `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim() || 'Your child';
-}
-
-/** Normalises what the user typed: codes are shown in groups and read aloud. */
-export function normaliseCode(input: string): string {
-  return input.replace(/[\s-]/g, '').toUpperCase();
 }

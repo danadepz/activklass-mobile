@@ -1,47 +1,72 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Switch } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { errorMessage } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import type { GuardianScopes } from '../lib/parent';
 import {
-  GuardianLink,
-  GuardianScopes,
-  MyGuardiansPayload,
-  approveGuardian,
-  getMyGuardianCode,
-  getMyGuardians,
-  revokeGuardian,
+  GuardianLinkDoc,
+  SCOPE_LABELS,
+  ALL_SCOPES_ON,
+  approveGuardianLink,
+  canManageOwnLinks,
+  ensureMyGuardianCode,
+  getDefaultScopes,
+  setDefaultScopes,
+  listMyGuardians,
+  revokeGuardianLink,
   rotateMyGuardianCode,
-  setGuardianScopes,
-} from '../lib/parent';
+  setGuardianLinkScopes,
+} from '../lib/guardianCodes';
+import { useThemeColors } from '../theme';
 
 /**
  * The student's parental-access controls: share code, per-guardian visibility
- * toggles, and the connected-guardian list with a revoke button.
+ * toggles, and the connected-guardian list with approve and revoke.
  *
- * Every decision here belongs to the backend. The old version generated its own
- * code ('AK' + random digits) and set its own is_minor from a client-side age
- * field — a student could edit their age to control the consent gate. Now the
- * code comes from /api/guardian-links/code and `can_manage` (derived from the
- * birthdate server-side) says whether the controls are editable at all.
+ * Reads and writes Firestore directly. It used to go through the Flask API,
+ * which kept the codes in Postgres — but a guardian has no account when they
+ * type a code, so nothing unauthenticated could check one, and an invalid code
+ * was only caught after the guardian had already registered. The code lives in
+ * Firestore now (src/lib/guardianCodes.ts explains the document shape).
  *
- * Under-18 students see the controls DISABLED with the reason, rather than not
- * at all: hiding them would leave a minor unable to see who is watching.
+ * The age gate is unchanged and still decided outside this component: under-18
+ * students see the controls DISABLED with the reason rather than hidden, since
+ * hiding them would leave a minor unable to see who is watching. What actually
+ * enforces it is firestore.rules, not this file.
  */
 export default function ParentalAccessPanel() {
+  const c = useThemeColors();
+  const { profile } = useAuth();
+
   const [code, setCode] = useState<string | null>(null);
-  const [data, setData] = useState<MyGuardiansPayload | null>(null);
+  const [guardians, setGuardians] = useState<GuardianLinkDoc[]>([]);
+  /* What approving a guardian grants. Held on the code document because it is
+     the only thing a student owns before any guardian exists. */
+  const [defaults, setDefaults] = useState<GuardianScopes>(ALL_SCOPES_ON);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // An unknown birthdate takes the adult path: the student consents for
+  // themselves. Treating unknown as "minor" would unlock a guardian with
+  // nobody having agreed to it.
+  const canManage = canManageOwnLinks(profile?.birthdate);
+
   const load = useCallback(async () => {
     try {
-      const [codeRes, guardians] = await Promise.all([getMyGuardianCode(), getMyGuardians()]);
-      setCode(codeRes.code);
-      setData(guardians);
+      // The code resolves first: the defaults live on that document.
+      const issued = await ensureMyGuardianCode();
+      const [links, scopes] = await Promise.all([listMyGuardians(), getDefaultScopes(issued)]);
+      setCode(issued);
+      setGuardians(links);
+      setDefaults(scopes);
       setError(null);
-    } catch (err) {
-      setError(errorMessage(err, 'Could not load your parental access settings.'));
+    } catch (err: any) {
+      setError(
+        err?.code === 'permission-denied'
+          ? 'Could not load your parental access settings. Your account may not have student access yet.'
+          : 'Could not load your parental access settings. Check your connection and try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -69,9 +94,9 @@ export default function ParentalAccessPanel() {
           onPress: async () => {
             setBusy('rotate');
             try {
-              setCode((await rotateMyGuardianCode()).code);
-            } catch (err) {
-              Alert.alert('Could not regenerate', errorMessage(err));
+              setCode(await rotateMyGuardianCode());
+            } catch {
+              Alert.alert('Could not regenerate', 'Please check your connection and try again.');
             } finally {
               setBusy(null);
             }
@@ -81,42 +106,52 @@ export default function ParentalAccessPanel() {
     );
   };
 
-  const handleToggle = async (link: GuardianLink, key: keyof GuardianScopes, value: boolean) => {
-    setBusy(link.id);
+  const handleToggle = async (link: GuardianLinkDoc, key: keyof GuardianScopes, value: boolean) => {
+    setBusy(link.link_id);
+    const next = { ...link.scopes, [key]: value };
     // Optimistic: the switch should not lag behind the finger.
-    setData((d) =>
-      d
-        ? {
-            ...d,
-            guardians: d.guardians.map((g) =>
-              g.id === link.id ? { ...g, scopes: { ...g.scopes, [key]: value } } : g
-            ),
-          }
-        : d
+    setGuardians((list) =>
+      list.map((g) => (g.link_id === link.link_id ? { ...g, scopes: next } : g))
     );
     try {
-      await setGuardianScopes(link.id, { [key]: value });
-    } catch (err) {
-      Alert.alert('Could not update', errorMessage(err));
+      await setGuardianLinkScopes(link.link_id, next);
+    } catch {
+      Alert.alert('Could not update', 'That change did not save. Please try again.');
       load(); // put the switch back where the server says it is
     } finally {
       setBusy(null);
     }
   };
 
-  const handleApprove = async (link: GuardianLink) => {
-    setBusy(link.id);
+  const handleDefaultToggle = async (key: keyof GuardianScopes, value: boolean) => {
+    if (!code) return;
+    const next = { ...defaults, [key]: value };
+    setDefaults(next); // optimistic: the switch should not lag the finger
+    setBusy('defaults');
     try {
-      await approveGuardian(link.id);
-      await load();
-    } catch (err) {
-      Alert.alert('Could not approve', errorMessage(err));
+      await setDefaultScopes(code, next);
+    } catch {
+      Alert.alert('Could not update', 'That change did not save. Please try again.');
+      load();
     } finally {
       setBusy(null);
     }
   };
 
-  const handleRevoke = (link: GuardianLink) => {
+  const handleApprove = async (link: GuardianLinkDoc) => {
+    setBusy(link.link_id);
+    try {
+      // Grant what the student chose up front, not everything.
+      await approveGuardianLink(link.link_id, defaults);
+      await load();
+    } catch {
+      Alert.alert('Could not approve', 'Please check your connection and try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleRevoke = (link: GuardianLinkDoc) => {
     Alert.alert(
       'Remove this guardian?',
       `${link.guardian_name ?? 'This guardian'} will immediately lose access to your records. They can reconnect only with a new code from you.`,
@@ -126,12 +161,12 @@ export default function ParentalAccessPanel() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            setBusy(link.id);
+            setBusy(link.link_id);
             try {
-              await revokeGuardian(link.id);
+              await revokeGuardianLink(link.link_id);
               await load();
-            } catch (err) {
-              Alert.alert('Could not remove', errorMessage(err));
+            } catch {
+              Alert.alert('Could not remove', 'Please check your connection and try again.');
             } finally {
               setBusy(null);
             }
@@ -143,7 +178,7 @@ export default function ParentalAccessPanel() {
 
   if (loading) {
     return (
-      <View className="bg-slate-900 border border-slate-850 rounded-2xl p-8 items-center">
+      <View className="bg-surface border border-hairline rounded-2xl p-8 items-center">
         <ActivityIndicator size="small" color="#6366f1" />
       </View>
     );
@@ -151,149 +186,169 @@ export default function ParentalAccessPanel() {
 
   if (error) {
     return (
-      <View className="bg-slate-900 border border-slate-850 rounded-2xl p-5">
-        <Text className="text-red-400 text-xs leading-relaxed">{error}</Text>
+      <View className="bg-surface border border-hairline rounded-2xl p-5">
+        <Text className="text-danger text-xs leading-relaxed">{error}</Text>
         <TouchableOpacity
           onPress={load}
-          className="mt-4 px-4 py-2 border border-slate-850 bg-slate-950 rounded-xl self-start"
+          className="mt-4 px-4 py-2 border border-hairline bg-sunken rounded-xl self-start"
         >
-          <Text className="text-slate-400 text-xs font-semibold">Try again</Text>
+          <Text className="text-ink-muted text-xs font-semibold">Try again</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const canManage = data?.can_manage ?? false;
-  const guardians = data?.guardians ?? [];
-  const scopeLabels = data?.scope_labels ?? [];
-
   return (
-    <View className="bg-slate-900 border border-slate-850 rounded-2xl p-5">
-      {!canManage && data?.locked_reason ? (
-        <Text className="text-slate-400 text-xs leading-normal bg-slate-950 p-4 rounded-xl border border-slate-850 mb-5">
-          ℹ️ {data.locked_reason} Your guardian keeps access while you are a minor. Ask your teacher
-          or school admin if something needs to change.
+    <View className="bg-surface border border-hairline rounded-2xl p-5">
+      {!canManage ? (
+        <Text className="text-ink-muted text-xs leading-normal bg-sunken p-4 rounded-xl border border-hairline mb-5">
+          ℹ️ Students under 18 cannot change guardian access. Your guardian keeps access while you
+          are a minor. Ask your teacher or school admin if something needs to change.
         </Text>
       ) : (
-        <Text className="text-slate-400 text-xs leading-normal bg-slate-950 p-4 rounded-xl border border-slate-850 mb-5">
+        <Text className="text-ink-muted text-xs leading-normal bg-sunken p-4 rounded-xl border border-hairline mb-5">
           🔒 You decide who sees your records and what they see. Share your code to connect a
           guardian, then turn individual sections on or off below.
         </Text>
       )}
 
       {/* Share code */}
-      <View className="bg-slate-950 border border-slate-850 p-4 rounded-xl items-center">
-        <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">
+      <View className="bg-sunken border border-hairline p-4 rounded-xl items-center">
+        <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider">
           Your Connection Code
         </Text>
-        <Text className="text-indigo-400 text-3xl font-black font-mono tracking-[6px] mt-2">
+        <Text className="text-accent-text text-3xl font-black font-mono tracking-[6px] mt-2">
           {code ?? '——————'}
         </Text>
-        <Text className="text-slate-500 text-[10px] text-center mt-2 leading-relaxed px-4">
+        <Text className="text-ink-faint text-[10px] text-center mt-2 leading-relaxed px-4">
           Give this to your guardian. They enter it in the ActivKlass parent app to connect.
         </Text>
         <View className="flex-row gap-3 mt-4">
-          <TouchableOpacity
-            onPress={copyCode}
-            className="px-4 py-2 bg-indigo-600 rounded-xl"
-          >
-            <Text className="text-white text-xs font-bold">Copy Code</Text>
+          <TouchableOpacity onPress={copyCode} className="px-4 py-2 bg-accent rounded-xl">
+            <Text className="text-on-accent text-xs font-bold">Copy Code</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleRotate}
             disabled={busy === 'rotate'}
-            className="px-4 py-2 border border-slate-850 bg-slate-900 rounded-xl"
+            className="px-4 py-2 border border-hairline bg-surface rounded-xl"
           >
             {busy === 'rotate' ? (
               <ActivityIndicator size="small" color="#94a3b8" />
             ) : (
-              <Text className="text-slate-400 text-xs font-semibold">New Code</Text>
+              <Text className="text-ink-muted text-xs font-semibold">New Code</Text>
             )}
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Only while nobody is connected. Once a guardian exists they carry
+          their own four below, and a second identical set here is the same
+          question asked twice with different answers. The stored defaults
+          still apply when a later guardian is approved. */}
+      {guardians.length === 0 && (
+        <>
+<Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-6 mb-1">
+        What guardians can see
+      </Text>
+      <Text className="text-ink-faint text-[11px] leading-relaxed mb-3">
+        {canManage
+          ? 'Applied when you approve a new guardian. Nobody sees anything until you approve them, and each guardian can be changed individually below.'
+          : 'These are managed for you and cannot be changed here.'}
+      </Text>
+      <View className="bg-sunken border border-hairline rounded-xl px-4 py-1">
+        {SCOPE_LABELS.map(({ key, label }) => (
+          <View key={key} className="flex-row justify-between items-center py-2.5">
+            <Text className="text-ink-soft text-xs flex-1 pr-3">{label}</Text>
+            <Switch
+              value={!!defaults[key]}
+              onValueChange={(v) => handleDefaultToggle(key, v)}
+              disabled={!canManage || busy === 'defaults'}
+              trackColor={{ false: c.track, true: c.accent }}
+              thumbColor={c.surface}
+            />
+          </View>
+        ))}
+      </View>
+        </>
+      )}
+
       {/* Connected guardians */}
-      <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-6 mb-3">
+      <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-6 mb-3">
         Connected Guardians ({guardians.length})
       </Text>
 
       {guardians.length === 0 ? (
-        <View className="bg-slate-950 border border-slate-850 p-5 rounded-xl items-center">
-          <Text className="text-slate-500 text-xs text-center">
+        <View className="bg-sunken border border-hairline p-5 rounded-xl items-center">
+          <Text className="text-ink-faint text-xs text-center">
             Nobody is connected yet. Share your code above to connect a guardian.
           </Text>
         </View>
       ) : (
         guardians.map((link) => (
-          <View
-            key={link.id}
-            className="bg-slate-950 border border-slate-850 p-4 rounded-xl mb-3"
-          >
+          <View key={link.link_id} className="bg-sunken border border-hairline p-4 rounded-xl mb-3">
             <View className="flex-row justify-between items-start">
               <View className="flex-1 pr-3">
-                <Text className="text-white text-sm font-bold">
+                <Text className="text-ink text-sm font-bold">
                   {link.guardian_name || link.guardian_email || 'Guardian'}
                 </Text>
-                <Text className="text-slate-500 text-[10px] mt-1">
+                <Text className="text-ink-faint text-[10px] mt-1">
                   {link.relationship_type ? `${link.relationship_type} · ` : ''}
                   {link.guardian_email ?? ''}
                 </Text>
-                {link.status !== 'approved' && (
-                  <Text className="text-amber-400 text-[10px] font-bold uppercase mt-1">
-                    Waiting for your approval
-                  </Text>
-                )}
               </View>
-
-              {/* Revoke sits to the right of the name, per the brief. */}
-              <TouchableOpacity
-                onPress={() => handleRevoke(link)}
-                disabled={!canManage || busy === link.id}
-                className={`px-3 py-2 rounded-xl border ${
-                  canManage ? 'border-red-500/30 bg-red-950/10' : 'border-slate-850 bg-slate-900'
-                }`}
-              >
-                <Text
-                  className={`text-[11px] font-bold ${canManage ? 'text-red-400' : 'text-slate-600'}`}
-                >
-                  Revoke
-                </Text>
-              </TouchableOpacity>
+              {link.status === 'approved' ? (
+                <Text className="text-success text-[10px] font-bold uppercase">Approved</Text>
+              ) : (
+                <Text className="text-warning text-[10px] font-bold uppercase">Pending</Text>
+              )}
             </View>
 
             {link.status !== 'approved' && canManage && (
               <TouchableOpacity
                 onPress={() => handleApprove(link)}
-                disabled={busy === link.id}
-                className="mt-3 py-3 rounded-xl items-center bg-emerald-600"
+                disabled={busy === link.link_id}
+                className="bg-accent py-3 rounded-xl items-center justify-center mt-4"
               >
-                <Text className="text-white text-xs font-bold">Approve Access</Text>
+                {busy === link.link_id ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-on-accent text-xs font-bold">Approve this guardian</Text>
+                )}
               </TouchableOpacity>
             )}
 
-            {/* Per-guardian visibility toggles */}
-            <View className="mt-4 pt-4 border-t border-slate-850">
-              {scopeLabels.map((scope) => (
-                <View
-                  key={scope.key}
-                  className="flex-row justify-between items-center py-2"
-                >
+            {/* Toggles stay visible while pending so a student can see exactly
+                what approving would hand over. */}
+            <View className="mt-4">
+              {SCOPE_LABELS.map(({ key, label }) => (
+                <View key={key} className="flex-row justify-between items-center py-2">
                   <Text
-                    className={`text-xs ${canManage ? 'text-slate-300' : 'text-slate-600'}`}
+                    className={`text-xs ${
+                      link.status === 'approved' ? 'text-ink-soft' : 'text-ink-faint'
+                    }`}
                   >
-                    {scope.label}
+                    {label}
                   </Text>
                   <Switch
-                    value={!!link.scopes[scope.key]}
-                    onValueChange={(v) => handleToggle(link, scope.key, v)}
-                    disabled={!canManage || busy === link.id}
-                    trackColor={{ false: '#1e293b', true: '#4f46e5' }}
-                    thumbColor="#e2e8f0"
+                    value={!!link.scopes[key]}
+                    onValueChange={(v) => handleToggle(link, key, v)}
+                    disabled={!canManage || link.status !== 'approved' || busy === link.link_id}
+                    trackColor={{ false: c.track, true: c.accent }}
+                    thumbColor={c.surface}
                   />
                 </View>
               ))}
             </View>
+
+            {canManage && (
+              <TouchableOpacity
+                onPress={() => handleRevoke(link)}
+                disabled={busy === link.link_id}
+                className="border border-red-500/30 bg-red-500/5 py-3 rounded-xl items-center justify-center mt-3"
+              >
+                <Text className="text-danger text-xs font-bold">Remove guardian</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ))
       )}

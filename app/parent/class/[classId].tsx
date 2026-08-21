@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../src/config/firebase';
@@ -34,10 +35,10 @@ type Tab = 'grades' | 'attendance' | 'insights' | 'announcements';
 /** Rendered when the student has switched a section off for this guardian. */
 function ScopeNotice({ label }: { label: string }) {
   return (
-    <View className="bg-slate-900 border border-slate-850 rounded-2xl p-8 items-center mt-3">
-      <Text className="text-slate-500 text-2xl mb-3">🔒</Text>
-      <Text className="text-white text-sm font-bold text-center">{label} are hidden</Text>
-      <Text className="text-slate-500 text-xs text-center mt-2 leading-relaxed max-w-xs">
+    <View className="bg-surface border border-hairline rounded-2xl p-8 items-center mt-3">
+      <Text className="text-ink-faint text-2xl mb-3">🔒</Text>
+      <Text className="text-ink text-sm font-bold text-center">{label} are hidden</Text>
+      <Text className="text-ink-faint text-xs text-center mt-2 leading-relaxed max-w-xs">
         Your child has turned off sharing for this section in their student portal.
       </Text>
     </View>
@@ -47,7 +48,7 @@ function ScopeNotice({ label }: { label: string }) {
 function Empty({ text }: { text: string }) {
   return (
     <View className="items-center py-10">
-      <Text className="text-slate-500 text-sm">{text}</Text>
+      <Text className="text-ink-faint text-sm">{text}</Text>
     </View>
   );
 }
@@ -74,6 +75,19 @@ export default function ParentClassDetail() {
   const capture = useCallback((key: Tab, err: unknown) => {
     if (err instanceof ApiError && err.code === 'scope_denied') {
       setDenied((d) => ({ ...d, [key]: true }));
+      return;
+    }
+    /* The link lives in Firestore, but these three endpoints resolve it from
+       the backend's own records — so a guardian who linked from the app is
+       unknown to them until the backend reads links from Firestore too. Say
+       that plainly instead of surfacing a bare "not linked", which reads as
+       "your connection was lost" to someone looking at a working dashboard. */
+    if (err instanceof ApiError && err.code === 'not_linked') {
+      setErrors((e) => ({
+        ...e,
+        [key]:
+          'Detailed records are not available for this connection yet. Your link is active — the school’s records server has not picked it up.',
+      }));
       return;
     }
     setErrors((e) => ({ ...e, [key]: errorMessage(err) }));
@@ -129,7 +143,7 @@ export default function ParentClassDetail() {
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-slate-950">
+      <View className="flex-1 justify-center items-center bg-sunken">
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -140,42 +154,42 @@ export default function ParentClassDetail() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-950">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1 bg-canvas">
+      <StatusBar style="auto" />
 
-      <View className="px-6 pt-6 pb-4 border-b border-slate-900 bg-slate-950">
+      <View className="px-6 pt-6 pb-4 border-b border-hairline bg-sunken">
         <TouchableOpacity onPress={() => router.back()} className="self-start mb-4">
-          <Text className="text-slate-400 text-sm font-semibold">← Back to Dashboard</Text>
+          <Text className="text-ink-muted text-sm font-semibold">← Back to Dashboard</Text>
         </TouchableOpacity>
 
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
-            <Text className="text-indigo-400 text-xs font-bold uppercase tracking-wider">
+            <Text className="text-accent-text text-xs font-bold uppercase tracking-wider">
               Monitoring: {studentName}
             </Text>
-            <Text className="text-white text-2xl font-black font-sans mt-1">
+            <Text className="text-ink text-2xl font-black font-sans mt-1">
               {performance?.subject || 'Course Overview'}
             </Text>
-            <Text className="text-slate-500 text-xs mt-1">
+            <Text className="text-ink-faint text-xs mt-1">
               Section: {performance?.section || '—'}
             </Text>
           </View>
 
-          <View className="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-            <Text className="text-indigo-400 text-[10px] font-bold uppercase">Read-Only Access</Text>
+          <View className="bg-surface border border-hairline px-3 py-1.5 rounded-xl">
+            <Text className="text-accent-text text-[10px] font-bold uppercase">Read-Only Access</Text>
           </View>
         </View>
       </View>
 
-      <View className="flex-row bg-slate-900 border-b border-slate-800">
+      <View className="flex-row bg-surface border-b border-hairline">
         {(['grades', 'attendance', 'insights', 'announcements'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveTab(tab)}
-            className={`flex-1 py-4 items-center ${activeTab === tab ? 'border-b-2 border-indigo-500' : ''}`}
+            className={`flex-1 py-4 items-center ${activeTab === tab ? 'border-b-2 border-accent' : ''}`}
           >
             <Text
-              className={`text-xs font-bold capitalize ${activeTab === tab ? 'text-indigo-400' : 'text-slate-500'}`}
+              className={`text-xs font-bold capitalize ${activeTab === tab ? 'text-accent-text' : 'text-ink-faint'}`}
             >
               {tab}
             </Text>
@@ -192,12 +206,12 @@ export default function ParentClassDetail() {
             <Empty text={errors.grades} />
           ) : (
             <View className="pb-10">
-              <View className="bg-slate-900 border border-slate-850 p-5 rounded-2xl flex-row justify-between items-center mt-3 mb-6">
+              <View className="bg-surface border border-hairline p-5 rounded-2xl flex-row justify-between items-center mt-3 mb-6">
                 <View>
-                  <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider">
                     Term Mark Average
                   </Text>
-                  <Text className="text-white text-3xl font-extrabold mt-1 font-sans">
+                  <Text className="text-ink text-3xl font-extrabold mt-1 font-sans">
                     {performance?.final_grade ?? '—'}
                   </Text>
                 </View>
@@ -206,10 +220,10 @@ export default function ParentClassDetail() {
                     className={`px-4 py-2 rounded-xl ${
                       performance.grading_mode === 'ched_point'
                         ? performance.final_grade <= 3.0
-                          ? 'bg-emerald-600/10'
+                          ? 'bg-success/10'
                           : 'bg-red-600/10'
                         : performance.final_grade >= 75
-                          ? 'bg-emerald-600/10'
+                          ? 'bg-success/10'
                           : 'bg-red-600/10'
                     }`}
                   >
@@ -217,11 +231,11 @@ export default function ParentClassDetail() {
                       className={`text-xs font-bold uppercase ${
                         performance.grading_mode === 'ched_point'
                           ? performance.final_grade <= 3.0
-                            ? 'text-emerald-400'
-                            : 'text-red-400'
+                            ? 'text-success'
+                            : 'text-danger'
                           : performance.final_grade >= 75
-                            ? 'text-emerald-400'
-                            : 'text-red-400'
+                            ? 'text-success'
+                            : 'text-danger'
                       }`}
                     >
                       {performance.grading_mode === 'ched_point'
@@ -238,22 +252,22 @@ export default function ParentClassDetail() {
 
               {(performance?.periods?.length ?? 0) > 0 && (
                 <View className="mb-6">
-                  <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">
+                  <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mb-3">
                     Grading Periods
                   </Text>
                   {performance!.periods.map((p) => (
                     <View
                       key={p.id}
-                      className="bg-slate-900 border border-slate-850 px-4 py-3 rounded-xl mb-2 flex-row justify-between items-center"
+                      className="bg-surface border border-hairline px-4 py-3 rounded-xl mb-2 flex-row justify-between items-center"
                     >
-                      <Text className="text-slate-300 text-xs font-semibold">{p.name ?? '—'}</Text>
-                      <Text className="text-white text-sm font-bold">{p.grade ?? '—'}</Text>
+                      <Text className="text-ink-soft text-xs font-semibold">{p.name ?? '—'}</Text>
+                      <Text className="text-ink text-sm font-bold">{p.grade ?? '—'}</Text>
                     </View>
                   ))}
                 </View>
               )}
 
-              <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-4">
+              <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mb-4">
                 Graded Assessments
               </Text>
 
@@ -268,30 +282,30 @@ export default function ParentClassDetail() {
                   return (
                     <View
                       key={`${asm.title ?? 'item'}-${i}`}
-                      className="bg-slate-900 border border-slate-850 p-4 rounded-xl mb-4 mt-2"
+                      className="bg-surface border border-hairline p-4 rounded-xl mb-4 mt-2"
                     >
                       <View className="flex-row justify-between items-start">
                         <View className="flex-1">
-                          <Text className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">
+                          <Text className="text-ink-faint text-[9px] font-bold uppercase tracking-wider">
                             {asm.component ?? 'Ungrouped'}
                             {asm.period ? ` · ${asm.period}` : ''}
                           </Text>
-                          <Text className="text-white text-sm font-bold mt-1 font-sans">
+                          <Text className="text-ink text-sm font-bold mt-1 font-sans">
                             {asm.title ?? 'Untitled'}
                           </Text>
-                          <Text className="text-slate-400 text-xs mt-2 font-mono">
+                          <Text className="text-ink-muted text-xs mt-2 font-mono">
                             Score:{' '}
-                            <Text className="text-white font-bold">{asm.student_score ?? '—'}</Text>{' '}
+                            <Text className="text-ink font-bold">{asm.student_score ?? '—'}</Text>{' '}
                             / {asm.total_points}
                           </Text>
-                          <Text className="text-slate-500 text-[10px] mt-1">
+                          <Text className="text-ink-faint text-[10px] mt-1">
                             Class Average: {asm.class_average ?? '—'}
                           </Text>
                         </View>
                       </View>
 
                       {ratio != null && (
-                        <View className="w-full h-1.5 bg-slate-950 rounded-full mt-3 overflow-hidden">
+                        <View className="w-full h-1.5 bg-sunken rounded-full mt-3 overflow-hidden">
                           <View
                             style={{ width: `${Math.min(100, ratio * 100)}%` }}
                             className={`h-full ${ratio >= 0.75 ? 'bg-emerald-500' : 'bg-amber-500'}`}
@@ -314,17 +328,17 @@ export default function ParentClassDetail() {
           ) : (
             <View className="pb-10">
               {attendance?.attendance_rate != null && (
-                <View className="bg-slate-900 border border-slate-850 p-5 rounded-2xl flex-row justify-between items-center mt-3">
-                  <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider">
+                <View className="bg-surface border border-hairline p-5 rounded-2xl flex-row justify-between items-center mt-3">
+                  <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider">
                     Attendance Rate
                   </Text>
-                  <Text className="text-white text-2xl font-extrabold">
+                  <Text className="text-ink text-2xl font-extrabold">
                     {attendance.attendance_rate}%
                   </Text>
                 </View>
               )}
 
-              <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-6 mb-4">
+              <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-6 mb-4">
                 Class Attendance Logs
               </Text>
 
@@ -334,17 +348,17 @@ export default function ParentClassDetail() {
                 attendance!.attendance_logs.map((log) => (
                   <View
                     key={log.date}
-                    className="bg-slate-900 border border-slate-850 p-4 rounded-xl mb-4 mt-2 flex-row justify-between items-center"
+                    className="bg-surface border border-hairline p-4 rounded-xl mb-4 mt-2 flex-row justify-between items-center"
                   >
                     <View className="flex-1 pr-3">
-                      <Text className="text-white text-sm font-semibold font-sans">{log.date}</Text>
+                      <Text className="text-ink text-sm font-semibold font-sans">{log.date}</Text>
                       {log.remarks ? (
-                        <Text className="text-slate-500 text-[10px] mt-1 leading-normal">
+                        <Text className="text-ink-faint text-[10px] mt-1 leading-normal">
                           Remarks: {log.remarks}
                         </Text>
                       ) : null}
                       {log.excuse_url ? (
-                        <Text className="text-indigo-400 text-[10px] mt-1">
+                        <Text className="text-accent-text text-[10px] mt-1">
                           📄 Excuse document attached
                         </Text>
                       ) : null}
@@ -357,19 +371,19 @@ export default function ParentClassDetail() {
                           : log.status === 'late'
                             ? 'bg-amber-500/10 border border-amber-500/30'
                             : log.status === 'excused'
-                              ? 'bg-indigo-500/10 border border-indigo-500/30'
+                              ? 'bg-accent/10 border border-accent/30'
                               : 'bg-red-500/10 border border-red-500/30'
                       }`}
                     >
                       <Text
                         className={`text-[10px] font-bold capitalize ${
                           log.status === 'present'
-                            ? 'text-emerald-400'
+                            ? 'text-success'
                             : log.status === 'late'
-                              ? 'text-amber-400'
+                              ? 'text-warning'
                               : log.status === 'excused'
-                                ? 'text-indigo-400'
-                                : 'text-red-400'
+                                ? 'text-accent-text'
+                                : 'text-danger'
                         }`}
                       >
                         {log.status}
@@ -389,7 +403,7 @@ export default function ParentClassDetail() {
             <Empty text={errors.insights} />
           ) : (
             <View className="pb-10">
-              <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-3 mb-4">
+              <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-3 mb-4">
                 Study Guides For This Class
               </Text>
 
@@ -399,16 +413,16 @@ export default function ParentClassDetail() {
                 classRemediations.map((r) => (
                   <View
                     key={r.id}
-                    className="bg-slate-900 border border-slate-850 p-5 rounded-2xl mb-4 mt-2"
+                    className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2"
                   >
-                    <Text className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider">
+                    <Text className="text-accent-text text-[10px] font-bold uppercase tracking-wider">
                       {r.status ?? 'assigned'}
                     </Text>
-                    <Text className="text-white text-base font-bold font-sans mt-1">
+                    <Text className="text-ink text-base font-bold font-sans mt-1">
                       {r.topic ?? 'Study guide'}
                     </Text>
                     {r.created_at ? (
-                      <Text className="text-slate-500 text-[10px] mt-2">Assigned {r.created_at}</Text>
+                      <Text className="text-ink-faint text-[10px] mt-2">Assigned {r.created_at}</Text>
                     ) : null}
                   </View>
                 ))
@@ -419,7 +433,7 @@ export default function ParentClassDetail() {
         {/* ANNOUNCEMENTS */}
         {activeTab === 'announcements' && (
           <View className="pb-10">
-            <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-3 mb-4">
+            <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-3 mb-4">
               Class Bulletins
             </Text>
 
@@ -429,14 +443,14 @@ export default function ParentClassDetail() {
               announcements.map((ann) => (
                 <View
                   key={ann.id}
-                  className="bg-slate-900 border border-slate-850 p-5 rounded-2xl mb-4 mt-2"
+                  className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2"
                 >
-                  <Text className="text-white text-base font-bold font-sans">{ann.title}</Text>
-                  <Text className="text-slate-400 text-xs mt-3 leading-relaxed">{ann.body}</Text>
+                  <Text className="text-ink text-base font-bold font-sans">{ann.title}</Text>
+                  <Text className="text-ink-muted text-xs mt-3 leading-relaxed">{ann.body}</Text>
 
-                  <View className="mt-4 pt-3 border-t border-slate-850 flex-row justify-between items-center">
-                    <Text className="text-slate-500 text-[10px]">Course Instructor</Text>
-                    <Text className="text-slate-600 text-[9px]">
+                  <View className="mt-4 pt-3 border-t border-hairline flex-row justify-between items-center">
+                    <Text className="text-ink-faint text-[10px]">Course Instructor</Text>
+                    <Text className="text-ink-faint text-[9px]">
                       {ann.created_at?.seconds
                         ? new Date(ann.created_at.seconds * 1000).toLocaleDateString()
                         : 'Active'}

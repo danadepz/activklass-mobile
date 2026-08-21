@@ -5,14 +5,18 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
+import { useConfirmLogout } from '../../src/hooks/useConfirmLogout';
 import { StatusBar } from 'expo-status-bar';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
+import ThemeToggle from '../../src/components/ThemeToggle';
+import { useThemeColors } from '../../src/theme';
 
 /**
  * Guardian profile — the parent side of "Update Profile".
@@ -28,8 +32,11 @@ import { StatusBar } from 'expo-status-bar';
  * Postgres keyed on that identity (middleware/auth.py).
  */
 export default function ParentProfileScreen() {
+  const c = useThemeColors();
+  useRequireAuth();
   const router = useRouter();
-  const { profile, refreshProfile, logout } = useAuth();
+  const { profile, refreshProfile } = useAuth();
+  const confirmLogout = useConfirmLogout();
 
   const [firstName, setFirstName] = useState(profile?.first_name ?? '');
   const [lastName, setLastName] = useState(profile?.last_name ?? '');
@@ -93,46 +100,46 @@ export default function ParentProfileScreen() {
 
   if (!profile) {
     return (
-      <View className="flex-1 justify-center items-center bg-slate-950">
+      <View className="flex-1 justify-center items-center bg-sunken">
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-950">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1 bg-canvas">
+      <StatusBar style="auto" />
       <ScrollView className="flex-1 px-6 py-4">
         <TouchableOpacity
           onPress={() => router.back()}
-          className="self-start w-10 h-10 items-center justify-center bg-slate-900 border border-slate-800 rounded-xl mt-4 mb-4"
+          className="self-start w-10 h-10 items-center justify-center bg-surface border border-hairline rounded-xl mt-4 mb-4"
         >
-          <Text className="text-white text-lg font-bold">←</Text>
+          <Text className="text-ink text-lg font-bold">←</Text>
         </TouchableOpacity>
 
         {/* Header */}
         <View className="mb-6">
-          <Text className="text-white text-3xl font-extrabold font-sans">Profile &amp; Settings</Text>
-          <Text className="text-slate-400 text-sm mt-2 font-sans">
+          <Text className="text-ink text-3xl font-extrabold font-sans">Profile &amp; Settings</Text>
+          <Text className="text-ink-muted text-sm mt-2 font-sans">
             Your details as the school and your child&apos;s teachers see them.
           </Text>
         </View>
 
         {/* Identity card */}
-        <View className="bg-slate-900 border border-slate-850 rounded-3xl p-6 mb-6">
+        <View className="bg-surface border border-hairline rounded-3xl p-6 mb-6">
           <View className="flex-row items-center">
-            <View className="w-14 h-14 bg-indigo-600 rounded-full items-center justify-center">
-              <Text className="text-white text-xl font-bold font-sans">
+            <View className="w-14 h-14 bg-accent rounded-full items-center justify-center">
+              <Text className="text-on-accent text-xl font-bold font-sans">
                 {profile.first_name?.[0]}
                 {profile.last_name?.[0]}
               </Text>
             </View>
             <View className="flex-1 pl-4">
-              <Text className="text-white text-lg font-bold font-sans">
+              <Text className="text-ink text-lg font-bold font-sans">
                 {profile.first_name} {profile.last_name}
               </Text>
-              <Text className="text-slate-400 text-xs mt-1">{profile.email}</Text>
-              <Text className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider mt-1">
+              <Text className="text-ink-muted text-xs mt-1">{profile.email}</Text>
+              <Text className="text-accent-text text-[10px] font-bold uppercase tracking-wider mt-1">
                 Guardian Account
               </Text>
             </View>
@@ -141,21 +148,21 @@ export default function ParentProfileScreen() {
 
         {error && (
           <View className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl mb-4">
-            <Text className="text-red-400 text-xs font-semibold leading-relaxed">{error}</Text>
+            <Text className="text-danger text-xs font-semibold leading-relaxed">{error}</Text>
           </View>
         )}
 
         {success && (
           <View className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl mb-4">
-            <Text className="text-emerald-400 text-xs font-semibold">{success}</Text>
+            <Text className="text-success text-xs font-semibold">{success}</Text>
           </View>
         )}
 
         {/* Editable details */}
-        <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">
+        <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mb-3">
           Your Details
         </Text>
-        <View className="bg-slate-900 border border-slate-850 rounded-2xl p-5 mb-6">
+        <View className="bg-surface border border-hairline rounded-2xl p-5 mb-6">
           <Field label="First name *" value={firstName} onChangeText={setFirstName} />
           <Field label="Last name *" value={lastName} onChangeText={setLastName} />
           <Field label="Middle name" value={middleName} onChangeText={setMiddleName} />
@@ -168,13 +175,13 @@ export default function ParentProfileScreen() {
 
           {/* Read-only: this is the sign-in identity. */}
           <View className="mb-1">
-            <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">
+            <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
               Email
             </Text>
-            <View className="w-full bg-slate-950 border border-slate-850 p-4 rounded-xl">
-              <Text className="text-slate-500 text-base">{profile.email}</Text>
+            <View className="w-full bg-sunken border border-hairline p-4 rounded-xl">
+              <Text className="text-ink-faint text-base">{profile.email}</Text>
             </View>
-            <Text className="text-slate-600 text-[10px] mt-2 leading-relaxed">
+            <Text className="text-ink-faint text-[10px] mt-2 leading-relaxed">
               You sign in with this address, so it cannot be changed here. Ask your school
               administrator if it needs to be corrected.
             </Text>
@@ -186,35 +193,41 @@ export default function ParentProfileScreen() {
           disabled={saving || !dirty}
           activeOpacity={0.8}
           className={`w-full py-4 rounded-xl items-center justify-center ${
-            saving || !dirty ? 'bg-indigo-600/40' : 'bg-indigo-600'
+            saving || !dirty ? 'bg-accent/40' : 'bg-accent'
           }`}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#ffffff" />
           ) : (
-            <Text className="text-white text-base font-bold font-sans">
+            <Text className="text-ink text-base font-bold font-sans">
               {dirty ? 'Save Changes' : 'No Changes to Save'}
             </Text>
           )}
         </TouchableOpacity>
 
         {/* Security */}
-        <Text className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-8 mb-3">
+        <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-8 mb-3">
           Security
         </Text>
         <TouchableOpacity
           onPress={() => router.push('/parent/change-pass')}
-          className="w-full bg-slate-900 border border-slate-850 py-4 px-5 rounded-xl flex-row justify-between items-center"
+          className="w-full bg-surface border border-hairline py-4 px-5 rounded-xl flex-row justify-between items-center"
         >
-          <Text className="text-slate-200 text-sm font-semibold">Change Password</Text>
-          <Text className="text-slate-500 text-base">›</Text>
+          <Text className="text-ink-soft text-sm font-semibold">Change Password</Text>
+          <Text className="text-ink-faint text-base">›</Text>
         </TouchableOpacity>
 
+        <View className="mb-8">
+
+          <ThemeToggle />
+
+        </View>
+
         <TouchableOpacity
-          onPress={logout}
-          className="w-full bg-slate-950 border border-red-500/20 py-4 rounded-xl items-center mt-4 mb-12"
+          onPress={confirmLogout}
+          className="w-full bg-sunken border border-red-500/20 py-4 rounded-xl items-center mt-4 mb-12"
         >
-          <Text className="text-red-400 text-sm font-bold">Log Out of Account</Text>
+          <Text className="text-danger text-sm font-bold">Log Out of Account</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -225,12 +238,15 @@ function Field({
   label,
   ...inputProps
 }: { label: string } & React.ComponentProps<typeof TextInput>) {
+  // Its own call: this Field lives outside the screen component, so the
+  // palette is not in scope from there.
+  const c = useThemeColors();
   return (
     <View className="mb-4">
-      <Text className="text-slate-300 text-xs font-bold mb-2 uppercase tracking-wider">{label}</Text>
+      <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">{label}</Text>
       <TextInput
-        placeholderTextColor="#64748b"
-        className="w-full bg-slate-950 border border-slate-850 p-4 rounded-xl text-white text-base"
+        placeholderTextColor={c.inkFaint}
+        className="w-full bg-sunken border border-hairline p-4 rounded-xl text-ink text-base"
         {...inputProps}
       />
     </View>
