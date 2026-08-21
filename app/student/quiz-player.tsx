@@ -27,6 +27,7 @@ import {
 import {
   finishAttempt,
   recordFocusEvent,
+  saveAnswers,
   recordReopen,
   startAttempt,
 } from '../../src/lib/attemptSession';
@@ -254,7 +255,22 @@ export default function QuizPlayer() {
       }
       // 'background' and 'inactive' both mean the quiz is no longer in front
       // of the student. Only the first one starts the clock on being away.
-      if (!awayRef.current) awayRef.current = { at: Date.now(), index: currentIdxRef.current };
+      if (!awayRef.current) {
+        awayRef.current = { at: Date.now(), index: currentIdxRef.current };
+        /* Bank the work at the moment risk appears.
+
+           This handler was already here, already writing to this document,
+           already fired by exactly the events that lose an app: another app,
+           a locked screen, an incoming call, the notification shade. It
+           recorded that the student left and discarded what they had written.
+
+           A deliberate exit is arguably the student's responsibility. Android
+           reclaiming memory from a backgrounded app is not, and from in here
+           the two are indistinguishable. */
+        if (!submittedRef.current) {
+          saveAnswers(attempt.id, answersRef.current).catch(() => {});
+        }
+      }
     });
     return () => sub.remove();
   }, [attempt]);

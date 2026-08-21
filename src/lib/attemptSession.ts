@@ -141,6 +141,30 @@ export function finishAttempt(
 }
 
 /**
+ * Bank the answers so far WITHOUT finishing the attempt.
+ *
+ * Until this existed, no answer reached Firestore until submit. The attempt
+ * document recorded expires_at_ms, reopen_count and focus_events -- it knew
+ * the student had left, and not one thing they had written. An OS low-memory
+ * kill, an incoming call or a flat battery cost them everything typed so far,
+ * while the deadline, anchored to the server clock, kept running.
+ *
+ * Deliberately does NOT touch status, score or submitted_at. This is a draft,
+ * not a submission: an attempt saved this way is still in_progress and still
+ * the student's to finish. finishAttempt overwrites `answers` with the final
+ * set, so a save that lands late cannot resurrect a stale one.
+ *
+ * Best effort by design -- every caller swallows the rejection. A failed
+ * background save must never interrupt someone mid-exam.
+ */
+export function saveAnswers(attemptId: string, answers: Record<string, any>) {
+  return updateDoc(doc(db, 'quiz_attempts', attemptId), {
+    answers,
+    answers_saved_at: serverTimestamp(),
+  });
+}
+
+/**
  * End an attempt the student never submitted.
  *
  * Teacher-side; ported so the two apps write the same shape if a teacher tool
