@@ -176,10 +176,32 @@ export function isMinor(birthdate: unknown, today = new Date()): boolean | null 
 // Student side: minting and rotating the code
 // ---------------------------------------------------------------------------
 
+/**
+ * A code is the credential that attaches a guardian to a child's records, so
+ * it is drawn from crypto rather than Math.random where the runtime offers it.
+ * Kept in step with the web copy in activklass-web/src/lib/guardianCodes.js.
+ *
+ * CODE_ALPHABET is exactly 32 characters and 256 divides evenly by 32, so
+ * `byte % 32` is unbiased. An alphabet of any other size would need rejection
+ * sampling -- do not shorten it without changing this.
+ *
+ * The Math.random branch is a fallback for a runtime without
+ * crypto.getRandomValues, and is no weaker than what it replaces. It is not
+ * expected to run on Expo SDK 57.
+ */
 function randomCode(): string {
+  const bytes = new Uint8Array(CODE_LENGTH);
+  const webCrypto = (globalThis as any).crypto;
+  if (typeof webCrypto?.getRandomValues === 'function') {
+    webCrypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < CODE_LENGTH; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
   let out = '';
   for (let i = 0; i < CODE_LENGTH; i += 1) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
   }
   return out;
 }
