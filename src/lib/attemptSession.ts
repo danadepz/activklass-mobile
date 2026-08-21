@@ -48,7 +48,7 @@ export async function startAttempt({
   quiz: any;
   classId?: string | null;
   studentId: string;
-  questions: Array<{ id: string }>;
+  questions: { id: string }[];
   attemptNumber: number;
 }) {
   const ref = await addDoc(collection(db, 'quiz_attempts'), {

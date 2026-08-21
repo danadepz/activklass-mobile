@@ -19,7 +19,7 @@ export interface PoolQuestion {
   id: string;
   qtype?: string;
   points?: number | string;
-  options?: Array<{ id: string; text?: string; is_correct?: boolean }>;
+  options?: { id: string; text?: string; is_correct?: boolean }[];
   [key: string]: any;
 }
 

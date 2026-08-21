@@ -34,7 +34,7 @@ export interface Attempt {
   total_score?: number | null;
   expires_at_ms?: number | null;
   reopen_count?: number;
-  focus_events?: Array<Record<string, any>>;
+  focus_events?: Record<string, any>[];
   focus_events_dropped?: number;
   expired_at_submit?: boolean;
   [key: string]: any;
