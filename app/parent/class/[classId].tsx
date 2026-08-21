@@ -11,9 +11,8 @@ import {
   AttendancePayload,
   PerformancePayload,
   getAnalytics,
-  getClassAttendance,
-  getClassPerformance,
 } from '../../../src/lib/parent';
+import { loadClassAttendance, loadClassPerformance } from '../../../src/lib/parentRecords';
 
 /**
  * One class, from the guardian's side.
@@ -102,8 +101,13 @@ export default function ParentClassDetail() {
 
     (async () => {
       const results = await Promise.allSettled([
-        getClassPerformance(studentId, classId),
-        getClassAttendance(studentId, classId),
+        // Grades and attendance come straight from Firestore now. The Flask
+        // endpoints recomputed the grade from raw scores on every request,
+        // which is the second implementation that drifted from the teacher's
+        // and showed a passing learner as failing. The stored entry is the
+        // one the Class Record wrote. Analytics is still on Flask.
+        loadClassPerformance(studentId, classId),
+        loadClassAttendance(studentId, classId),
         getAnalytics(studentId),
       ]);
       if (cancelled) return;
