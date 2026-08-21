@@ -10,6 +10,9 @@ export interface UserProfile {
   middle_name?: string | null;
   email: string;
   role: 'student' | 'parent' | 'teacher' | 'admin';
+  /** A data: URI, not an https one — this project has no Storage bucket, so a
+   *  resized photo rides inline on the profile. See src/lib/avatar.ts. */
+  photo_url?: string | null;
   /** Guardians register with one; the parent profile screen edits it. */
   contact_number?: string | null;
   /** Set on accounts an admin provisioned; forces the change-password screen. */

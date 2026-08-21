@@ -1,3 +1,67 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Colour tokens.
+ *
+ * Every screen used to name its colours literally -- bg-slate-950, text-white,
+ * border-slate-850 -- around 560 times across 21 screens. That is a palette
+ * that can only ever be dark: there is no seam to change. These variables are
+ * the seam. Screens ask for a ROLE (canvas, surface, ink) and the role resolves
+ * differently per theme.
+ *
+ * Values are space-separated RGB channels, not hex, because tailwind.config.js
+ * wraps them as rgb(var(--x) / <alpha-value>) so opacity modifiers such as
+ * bg-surface/40 keep working.
+ *
+ * The dark values are the exact slate shades the app already shipped, so moving
+ * to this layer changes no pixels in dark mode; light is the new half. Mirrors
+ * activklass-web/src/theme.js, which does the same job for the web.
+ */
+
+:root {
+  /* Light. Warm off-white rather than pure #FFFFFF -- a full-white page at max
+     brightness is what sends people looking for dark mode in the first place. */
+  --color-canvas: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-sunken: 241 245 249;
+  --color-hairline: 226 232 240;
+  --color-hairline-strong: 203 213 225;
+
+  --color-ink: 15 23 42;
+  --color-ink-soft: 51 65 85;
+  --color-ink-muted: 100 116 139;
+  --color-ink-faint: 148 163 184;
+
+  /* Brand and status keep their hue across themes; only the step changes, so
+     indigo-on-white and indigo-on-near-black both stay legible. */
+  --color-accent: 79 70 229;
+  --color-accent-text: 67 56 202;
+  --color-on-accent: 255 255 255;
+  --color-success: 5 150 105;
+  --color-warning: 180 83 9;
+  --color-danger: 220 38 38;
+}
+
+.dark:root,
+.dark {
+  /* Dark -- the shades the app already used, unchanged. */
+  --color-canvas: 2 6 23;
+  --color-surface: 15 23 42;
+  --color-sunken: 2 6 23;
+  --color-hairline: 30 41 59;
+  --color-hairline-strong: 51 65 85;
+
+  --color-ink: 255 255 255;
+  --color-ink-soft: 203 213 225;
+  --color-ink-muted: 148 163 184;
+  --color-ink-faint: 100 116 139;
+
+  --color-accent: 79 70 229;
+  --color-accent-text: 129 140 248;
+  --color-on-accent: 255 255 255;
+  --color-success: 52 211 153;
+  --color-warning: 251 191 36;
+  --color-danger: 248 113 113;
+}

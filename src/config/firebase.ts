@@ -1,6 +1,12 @@
+import { Platform } from 'react-native';
 import { initializeApp } from 'firebase/app';
-// @ts-ignore — getReactNativePersistence is not in the published types yet
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import {
+  initializeAuth,
+  browserLocalPersistence,
+  // @ts-ignore — getReactNativePersistence is not in the published types yet,
+  // and it does not exist at all in the web build (see the Platform check below)
+  getReactNativePersistence,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,9 +32,15 @@ if (!firebaseConfig.projectId) {
 
 const app = initializeApp(firebaseConfig);
 
-// AsyncStorage persistence keeps the user signed in across app restarts.
+// Persistence keeps the user signed in across app restarts. The helper differs
+// per platform: firebase/auth resolves to a browser build on web, which does
+// not export getReactNativePersistence at all, so calling it there throws
+// "getReactNativePersistence is not a function" during the expo-router render.
 const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
+  persistence:
+    Platform.OS === 'web'
+      ? browserLocalPersistence
+      : getReactNativePersistence(AsyncStorage),
 });
 
 const db = getFirestore(app);

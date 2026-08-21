@@ -1,24 +1,24 @@
 {
   "expo": {
-    "name": "ActivKlass_Mobile",
-    "slug": "ActivKlass_Mobile",
+    "name": "ActivKlass",
+    "slug": "activklass-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "activklassmobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#020617",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.ActivKlass_Mobile"
+      "package": "com.activklass.mobile"
     },
     "web": {
       "bundler": "metro",
@@ -32,12 +32,13 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#020617"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "backgroundColor": "#020617"
   }
 }
