@@ -289,8 +289,18 @@ export default function QuizPlayer() {
   const currentIdxRef = useRef(0);
   const questionsRef = useRef<any[]>(questions);
   const justStartedRef = useRef(false);
+  /* answers needs the same mirror, and for a costlier reason than the other
+     two. setAttempt runs exactly twice -- resuming a prior attempt, or
+     creating one -- so `attempt` never changes while the student is typing,
+     so the countdown effect keyed on [attempt] runs ONCE and freezes that
+     render's submitQuizAttempt inside the Time Up alert. That render is the
+     one where the attempt was set, when answers was still {}. Tapping OK on
+     an expired timer therefore graded and saved an empty answer set: a zero,
+     with everything the student had entered discarded. */
+  const answersRef = useRef(answers);
   useEffect(() => { currentIdxRef.current = currentIdx; }, [currentIdx]);
   useEffect(() => { questionsRef.current = questions; }, [questions]);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
 
   /* Writes the attempt, then hands over to the player. Nothing exists in
      Firestore until this runs, which is what lets the briefing screen be a
@@ -356,7 +366,11 @@ export default function QuizPlayer() {
     // depending on the device.
     // The drawn paper, not the whole pool: grading `quiz` directly would mark
     // a pooled student against questions they never saw.
-    const graded = gradeQuiz({ ...quiz, questions }, answers);
+    // answersRef, not `answers`: the expired-timer path reaches here through a
+    // closure frozen at the render where the attempt was created. The ref is
+    // always current, and for the manual Submit button the two are identical.
+    const submitted = answersRef.current;
+    const graded = gradeQuiz({ ...quiz, questions }, submitted);
 
     try {
       /* Closes the attempt that already exists rather than creating one. The
@@ -369,7 +383,7 @@ export default function QuizPlayer() {
          actually reads (scaffold mastery, quiz results, class history). */
       await finishAttempt(attempt.id, {
         result: graded,
-        answers,
+        answers: submitted,
         expired: hasExpired(attempt),
       });
 
