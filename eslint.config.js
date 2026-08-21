@@ -20,4 +20,30 @@ module.exports = defineConfig([
     // Build output and the native projects: generated or vendored, not ours.
     ignores: ['dist/*', '.expo/*', 'android/*', 'ios/*', 'expo-env.d.ts'],
   },
+  {
+    /* Test globals, declared here rather than with `/* eslint-env jest *​/`.
+       Flat config stopped honouring that comment and warns that it becomes an
+       error in ESLint 10 -- and while it was being ignored, jest.setup.js was
+       reporting 30 no-undef errors for `jest`, `require` and friends. The
+       warning is printed above the errors it causes, so a `tail` on the output
+       hides exactly the thing that explains it. */
+    files: ['**/*.screen.test.tsx', 'jest.setup.js', 'src/test/**'],
+    languageOptions: {
+      globals: {
+        jest: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        require: 'readonly',
+        module: 'writable',
+        console: 'readonly',
+        globalThis: 'writable',
+      },
+    },
+  },
 ]);
