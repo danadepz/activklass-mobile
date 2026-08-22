@@ -71,12 +71,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(null);
       setStatus('error');
       
+      /* The code and the cause are already on the console line above, which
+         is where whoever maintains this looks. What reaches the screen is for
+         the parent holding the phone, so it names their account, not ours. */
       const hint = {
-        'permission-denied': 'Firestore permission denied. Please deploy Firestore security rules.',
-        'unavailable': 'Firestore is unreachable. Verify network connection and emulator configurations.',
-      }[err.code as string] ?? 'Verify database connection and credentials.';
+        'permission-denied': 'This account does not have access yet. Ask the school to check it.',
+        'unavailable': 'We could not reach the server. Check your connection and try again.',
+      }[err.code as string] ?? 'Check your connection and try again.';
       
-      setErrorDetail(`Failed to fetch profile (${err.code ?? err.message}). ${hint}`);
+      setErrorDetail(`Could not load your account. ${hint}`);
     }
   }, []);
 

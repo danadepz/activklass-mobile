@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { updatePassword, signOut } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
@@ -56,9 +56,13 @@ export default function ParentChangePassScreen() {
       // 1. Update password in Firebase Auth
       await updatePassword(currentUser, newPassword);
 
-      // 2. Remove is_temp_password flag from Firestore user profile
+      // 2. Remove is_temp_password flag from Firestore user profile, and stamp
+      //    when it happened. The web console reads both to tell staff who is
+      //    still on the password the school handed out. The password itself is
+      //    never written here -- Firebase Auth holds it, hashed.
       await updateDoc(doc(db, 'users', currentUser.uid), {
         is_temp_password: false,
+        password_changed_at: serverTimestamp(),
       });
 
       // 3. Refresh context profile so that status updates
