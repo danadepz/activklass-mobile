@@ -135,8 +135,20 @@ export interface AnalyticsPayload {
 // the approve/scope/revoke actions all moved to src/lib/guardianCodes.ts. The
 // reason is in that file's header: a guardian has no account when they type a
 // code, so an API gated on the parent role could never check one before
-// sign-up. The types above are still shared, and the portal reads below still
-// go through Flask because an attendance document holds the whole class.
+// sign-up.
+//
+// So did the portal reads. NOTHING BELOW HAS A CALLER as of 2026-08-22: the
+// dashboard reads parentData.ts and the class screen reads parentRecords.ts,
+// both Firestore. These endpoints resolved the guardian link from the
+// backend's own table, which never saw a link made in this app, so they
+// answered `not_linked` for connections the dashboard showed as live.
+// Attendance was the last one thought to be impossible in the rules -- an
+// attendance document holds the whole class -- until the teacher's save began
+// writing a per-student summary beside it.
+//
+// The functions stay because the types above are shared and the app has no
+// other Flask call to keep `api()` honest. Delete them with the blueprint, not
+// before -- see activklass-backend docs/04-setup.md.
 
 // ---------------------------------------------------------------------------
 // Portal data

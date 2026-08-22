@@ -27,7 +27,8 @@ vi.mock('firebase/firestore', () => ({
 }))
 vi.mock('../config/firebase', () => ({ db: {} }))
 
-const { loadClassAttendance, loadClassPerformance } = await import('./parentRecords')
+const { loadClassAttendance, loadClassPerformance, loadClassStudyGuides } =
+  await import('./parentRecords')
 
 const entry = (over: Record<string, any> = {}) => ({
   exists: () => true,
@@ -142,5 +143,73 @@ describe('loadClassAttendance', () => {
     getDocs.mockResolvedValue(summaries([{ ...row, tally: undefined }]))
     const a = await loadClassAttendance('student-1', 'c1')
     expect(a?.tally).toEqual({ present: 0, late: 0, absent: 0, excused: 0 })
+  })
+})
+
+const guides = (rows: any[]) => ({
+  docs: rows.map(({ id, ...data }) => ({ id, data: () => data })),
+})
+
+const stamp = (iso: string) => ({ toDate: () => new Date(iso) })
+
+describe('loadClassStudyGuides', () => {
+  const guide = (over: Record<string, any> = {}) => ({
+    id: 'r1',
+    kind: 'assignment',
+    student_id: 'student-1',
+    class_id: 'c1',
+    topic: "Newton's Laws",
+    title: "Remediation · Newton's Laws",
+    status: 'published',
+    created_at: stamp('2026-07-11T02:00:00Z'),
+    ...over,
+  })
+
+  it('keeps only the guides for THIS class', async () => {
+    // Same reason as attendance: the query filters by student alone, so this
+    // filter is what stops another subject's remediation appearing here.
+    getDocs.mockResolvedValue(guides([guide(), guide({ id: 'r2', class_id: 'other' })]))
+    const rows = await loadClassStudyGuides('student-1', 'c1')
+    expect(rows.map((r) => r.id)).toEqual(['r1'])
+  })
+
+  it('renders a date, not a Timestamp object', async () => {
+    // The tab prints created_at straight into "Assigned {date}". The endpoint
+    // sent 'YYYY-MM-DD'; handing the screen the stored Timestamp would put
+    // [object Object] in front of a parent.
+    getDocs.mockResolvedValue(guides([guide()]))
+    const rows = await loadClassStudyGuides('student-1', 'c1')
+    expect(rows[0].created_at).toBe('2026-07-11')
+  })
+
+  it('newest first, undated last', async () => {
+    getDocs.mockResolvedValue(
+      guides([
+        guide({ id: 'old', created_at: stamp('2026-06-01T02:00:00Z') }),
+        guide({ id: 'undated', created_at: undefined }),
+        guide({ id: 'new', created_at: stamp('2026-08-01T02:00:00Z') }),
+      ])
+    )
+    const rows = await loadClassStudyGuides('student-1', 'c1')
+    expect(rows.map((r) => r.id)).toEqual(['new', 'old', 'undated'])
+  })
+
+  it('falls back to the title for a record logged by /api/remediate', async () => {
+    // Those predate remediation plans and carry no topic. The endpoint fell
+    // back the same way; without it the card reads "Study guide" for every one.
+    getDocs.mockResolvedValue(guides([guide({ topic: undefined })]))
+    const rows = await loadClassStudyGuides('student-1', 'c1')
+    expect(rows[0].topic).toBe("Remediation · Newton's Laws")
+  })
+
+  it('leaves an already-stored date string alone', async () => {
+    getDocs.mockResolvedValue(guides([guide({ created_at: '2026-07-11' })]))
+    expect((await loadClassStudyGuides('student-1', 'c1'))[0].created_at).toBe('2026-07-11')
+  })
+
+  it('has no guide with no class rather than showing it everywhere', async () => {
+    // A malformed row with no class_id must not be filtered INTO every class.
+    getDocs.mockResolvedValue(guides([guide({ class_id: undefined })]))
+    expect(await loadClassStudyGuides('student-1', 'c1')).toEqual([])
   })
 })

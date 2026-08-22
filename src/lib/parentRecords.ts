@@ -104,3 +104,82 @@ export async function loadClassAttendance(
     attendance_rate: row.rate ?? null,
   };
 }
+
+/** One assigned study guide, as the insights tab renders it. */
+export interface StudyGuide {
+  id: string;
+  class_id: string | null;
+  topic: string | null;
+  status: string | null;
+  /** 'YYYY-MM-DD', the shape the endpoint returned and the tab prints raw. */
+  created_at: string | null;
+}
+
+/**
+ * The study guides assigned to this student in this class.
+ *
+ * Replaces GET /api/parent/student/{id}/analytics, the last call this app made
+ * to Flask. That endpoint already read `remediations` from Firestore through
+ * the Admin SDK -- so the move is not about where the data lives but about who
+ * resolves the guardian link. It resolved it from the backend's own SQL table,
+ * which knows nothing about a link created in this app, and answered
+ * `not_linked` for a connection the dashboard was showing as live. The rules
+ * resolve it from the link document itself, so this one works.
+ *
+ * A draft is invisible here for the same reason it is invisible to the student:
+ * a plan carries `target_student_ids` and no `student_id` until it is published
+ * (see activklass-web features/classes/remediation.js), so neither the query
+ * nor the rule matches it.
+ *
+ * Two payload fields are not rebuilt. `active_study_guides` was a count no
+ * screen read, and `subjects` recomputed each class's grade from raw scores --
+ * the second implementation this migration exists to remove. The dashboard
+ * already gets that list from the stored entries, in parentData.ts.
+ *
+ * Filtered by class in memory, like loadClassAttendance above and for the same
+ * reason: a second equality filter would need a composite index for a handful
+ * of documents per student.
+ */
+export async function loadClassStudyGuides(
+  studentUid: string,
+  classId: string,
+): Promise<StudyGuide[]> {
+  const snap = await getDocs(
+    query(collection(db, 'remediations'), where('student_id', '==', studentUid)),
+  );
+
+  return snap.docs
+    .map((d) => {
+      const data = d.data() as any;
+      return {
+        id: d.id,
+        class_id: data.class_id ?? null,
+        // Records written by /api/remediate before plans existed carry a title
+        // and no topic. The endpoint fell back the same way.
+        topic: data.topic || data.title || null,
+        status: data.status ?? null,
+        created_at: toDateKey(data.created_at),
+      };
+    })
+    .filter((g) => g.class_id === classId)
+    // Newest first, nulls last -- what the endpoint's sort produced. Dates are
+    // ISO yyyy-mm-dd, so a string compare is a date compare.
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+}
+
+/**
+ * A Firestore Timestamp as 'YYYY-MM-DD'.
+ *
+ * The endpoint sent this string and the tab prints it as "Assigned {date}", so
+ * handing the screen a Timestamp object would render [object Object]. Strings
+ * pass through: the AI-logged records store a server timestamp, but an older
+ * row may already hold a date.
+ */
+function toDateKey(value: any): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return value;
+  const date = value?.toDate?.();
+  return date instanceof Date && !isNaN(date.getTime())
+    ? date.toISOString().slice(0, 10)
+    : null;
+}

@@ -5,24 +5,27 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
-import { ApiError, errorMessage } from '../../../src/lib/api';
+import { errorMessage } from '../../../src/lib/api';
+import { AttendancePayload, PerformancePayload } from '../../../src/lib/parent';
 import {
-  AnalyticsPayload,
-  AttendancePayload,
-  PerformancePayload,
-  getAnalytics,
-} from '../../../src/lib/parent';
-import { loadClassAttendance, loadClassPerformance } from '../../../src/lib/parentRecords';
+  StudyGuide,
+  loadClassAttendance,
+  loadClassPerformance,
+  loadClassStudyGuides,
+} from '../../../src/lib/parentRecords';
 
 /**
  * One class, from the guardian's side.
  *
- * Grades, attendance and insights come from the Flask API — attendance in
- * particular CANNOT come from Firestore, because the attendance document holds
- * every student's record and a security rule cannot filter inside a document.
+ * Every tab now reads Firestore directly; this screen makes no API call. What
+ * the endpoints added was a second computation of the grade and a guardian link
+ * resolved from the backend's own records, which is the pair of bugs the
+ * migration removed. Announcements were always read here.
  *
- * Announcements stay on Firestore: that collection is readable by any signed-in
- * user by design (see firestore.rules, announcements).
+ * Attendance is the one that looks impossible: the class sheet is ONE document
+ * holding every student's record, and a rule cannot filter inside a document.
+ * It reads a per-student projection the teacher's save writes beside the sheet
+ * — see src/lib/parentRecords.ts and activklass-web src/lib/attendanceMirror.js.
  *
  * The syllabus tab is gone. Parents have no read access to
  * classes/{id}/syllabus/current, so it could only ever have shown an error.
@@ -63,7 +66,7 @@ export default function ParentClassDetail() {
 
   const [performance, setPerformance] = useState<PerformancePayload | null>(null);
   const [attendance, setAttendance] = useState<AttendancePayload | null>(null);
-  const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
+  const [studyGuides, setStudyGuides] = useState<StudyGuide[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -71,22 +74,12 @@ export default function ParentClassDetail() {
   const [denied, setDenied] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
-  const capture = useCallback((key: Tab, err: unknown) => {
-    if (err instanceof ApiError && err.code === 'scope_denied') {
+  /* A switched-off toggle now arrives as a rules refusal rather than the API's
+     scope_denied, because the scope is checked where the data is. Same notice:
+     the student turned this section off, which is not an error to report. */
+  const capture = useCallback((key: Tab, err: any) => {
+    if (err?.code === 'permission-denied') {
       setDenied((d) => ({ ...d, [key]: true }));
-      return;
-    }
-    /* The link lives in Firestore, but these three endpoints resolve it from
-       the backend's own records — so a guardian who linked from the app is
-       unknown to them until the backend reads links from Firestore too. Say
-       that plainly instead of surfacing a bare "not linked", which reads as
-       "your connection was lost" to someone looking at a working dashboard. */
-    if (err instanceof ApiError && err.code === 'not_linked') {
-      setErrors((e) => ({
-        ...e,
-        [key]:
-          'Detailed records are not available for this connection yet. Your link is active — the school’s records server has not picked it up.',
-      }));
       return;
     }
     setErrors((e) => ({ ...e, [key]: errorMessage(err) }));
@@ -101,26 +94,27 @@ export default function ParentClassDetail() {
 
     (async () => {
       const results = await Promise.allSettled([
-        // Grades and attendance come straight from Firestore now. The Flask
-        // endpoints recomputed the grade from raw scores on every request,
-        // which is the second implementation that drifted from the teacher's
-        // and showed a passing learner as failing. The stored entry is the
-        // one the Class Record wrote. Analytics is still on Flask.
+        // All three come straight from Firestore. The Flask endpoints
+        // recomputed the grade from raw scores on every request, which is the
+        // second implementation that drifted from the teacher's and showed a
+        // passing learner as failing; and they resolved the guardian link from
+        // records that never saw a link made in this app. The stored entry is
+        // the one the Class Record wrote.
         loadClassPerformance(studentId, classId),
         loadClassAttendance(studentId, classId),
-        getAnalytics(studentId),
+        loadClassStudyGuides(studentId, classId),
       ]);
       if (cancelled) return;
 
-      const [perf, att, ana] = results;
+      const [perf, att, guides] = results;
       if (perf.status === 'fulfilled') setPerformance(perf.value);
       else capture('grades', perf.reason);
 
       if (att.status === 'fulfilled') setAttendance(att.value);
       else capture('attendance', att.reason);
 
-      if (ana.status === 'fulfilled') setAnalytics(ana.value);
-      else capture('insights', ana.reason);
+      if (guides.status === 'fulfilled') setStudyGuides(guides.value);
+      else capture('insights', guides.reason);
 
       setLoading(false);
     })();
@@ -152,10 +146,6 @@ export default function ParentClassDetail() {
       </View>
     );
   }
-
-  const classRemediations = (analytics?.remediations ?? []).filter(
-    (r) => r.class_id === classId
-  );
 
   return (
     <SafeAreaView className="flex-1 bg-canvas">
@@ -411,10 +401,10 @@ export default function ParentClassDetail() {
                 Study Guides For This Class
               </Text>
 
-              {classRemediations.length === 0 ? (
+              {studyGuides.length === 0 ? (
                 <Empty text="No study guides assigned for this class." />
               ) : (
-                classRemediations.map((r) => (
+                studyGuides.map((r) => (
                   <View
                     key={r.id}
                     className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2"
