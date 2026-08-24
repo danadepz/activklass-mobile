@@ -32,8 +32,18 @@ export default function ParentChangePassScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    // Same policy as the web ChangePassword form (lib/validation.js there):
+    // 8+ characters with an uppercase and lowercase letter, a number and a
+    // special character. Firebase itself only requires 6.
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (
+      !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) ||
+      !/\d/.test(newPassword) || !/[^A-Za-z0-9\s]/.test(newPassword)
+    ) {
+      setError('Password must include an uppercase and lowercase letter, a number, and a special character (like ! @ # $).');
       return;
     }
 
