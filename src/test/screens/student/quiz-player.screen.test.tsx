@@ -24,8 +24,8 @@
  */
 import React from 'react'
 import { screen, waitFor } from '@testing-library/react-native'
-import { renderScreen } from '../../src/test/renderScreen'
-import QuizPlayer from './quiz-player'
+import { renderScreen } from '../../renderScreen'
+import QuizPlayer from '../../../../app/student/quiz-player'
 
 describe('quiz player', () => {
   it('mounts when the quiz cannot be loaded', async () => {

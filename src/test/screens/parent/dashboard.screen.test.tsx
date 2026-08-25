@@ -18,8 +18,8 @@
  */
 import React from 'react'
 import { screen, waitFor } from '@testing-library/react-native'
-import { renderScreen } from '../../src/test/renderScreen'
-import ParentDashboard from './dashboard'
+import { renderScreen } from '../../renderScreen'
+import ParentDashboard from '../../../../app/parent/dashboard'
 
 beforeEach(() => {
   globalThis.signedInAs({

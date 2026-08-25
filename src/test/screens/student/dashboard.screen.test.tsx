@@ -14,8 +14,8 @@
  */
 import React from 'react'
 import { screen, waitFor } from '@testing-library/react-native'
-import { renderScreen } from '../../src/test/renderScreen'
-import StudentDashboard from './dashboard'
+import { renderScreen } from '../../renderScreen'
+import StudentDashboard from '../../../../app/student/dashboard'
 
 describe('student dashboard', () => {
   it('mounts for a student with no data at all', async () => {
