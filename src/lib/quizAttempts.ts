@@ -45,7 +45,7 @@ export interface AttemptQuiz {
   assigned_to?: string | string[] | null;
   opens_at?: string | null;
   closes_at?: string | null;
-  attempts_allowed?: number | string;
+  attempts_allowed?: number | string | null;
   extra_attempts?: Record<string, number>;
   time_limit_minutes?: number | string | null;
   prevent_backtracking?: boolean;
@@ -89,9 +89,39 @@ export function openAttempt(attempts: Attempt[] = []): Attempt | null {
  * allowance later does not silently revoke an individual grant.
  */
 export function attemptsAllowedFor(quiz: AttemptQuiz | null | undefined, studentId?: string): number {
+  // Unlimited swallows the grant rather than adding to it: there is no
+  // ceiling left to raise.
+  if (unlimitedAttempts(quiz)) return Infinity;
   const base = Number(quiz?.attempts_allowed) || 1;
   const extra = Number(studentId ? quiz?.extra_attempts?.[studentId] : 0) || 0;
   return Math.max(base + extra, 0);
+}
+
+/**
+ * Whether this quiz has no ceiling on attempts -- the closing date is the
+ * only limit.
+ *
+ * `attempts_allowed: null` or `0` is the sentinel the teacher picks with
+ * "Unlimited attempts until it closes". A quiz that never stored the field is
+ * deliberately NOT unlimited: absent has meant one attempt since the field
+ * existed, and reading it as no limit would quietly widen every old document.
+ */
+export function unlimitedAttempts(quiz: AttemptQuiz | null | undefined): boolean {
+  const raw = quiz?.attempts_allowed;
+  if (raw === undefined || raw === '') return false;
+  if (raw === null) return true;
+  const n = Number(raw);
+  return Number.isFinite(n) && n === 0;
+}
+
+/**
+ * The allowance as a person should read it.
+ *
+ * Exists because `Infinity` reaches a template literal as the word "Infinity",
+ * which is what a counter would print the moment unlimited was introduced.
+ */
+export function attemptsLabel(allowed: number): string {
+  return Number.isFinite(allowed) ? String(allowed) : '∞';
 }
 
 /**
@@ -268,14 +298,24 @@ export function startBriefing({
     });
   }
 
-  rules.push({
-    key: 'attempts',
-    label: `Attempt ${used + 1} of ${allowed}`,
-    detail:
-      used + 1 >= allowed
-        ? 'This is your last attempt. Ask your teacher if you need another.'
-        : `You have ${allowed - used - 1} more after this one.`,
-  });
+  // No "of N" and no count of what is left when there is no ceiling: both
+  // would read as "Infinity", and neither is a fact about this quiz.
+  if (Number.isFinite(allowed)) {
+    rules.push({
+      key: 'attempts',
+      label: `Attempt ${used + 1} of ${allowed}`,
+      detail:
+        used + 1 >= allowed
+          ? 'This is your last attempt. Ask your teacher if you need another.'
+          : `You have ${allowed - used - 1} more after this one.`,
+    });
+  } else {
+    rules.push({
+      key: 'attempts',
+      label: `Attempt ${used + 1}`,
+      detail: 'You can retake this quiz as many times as you like until it closes.',
+    });
+  }
 
   rules.push({
     key: 'reopen',
