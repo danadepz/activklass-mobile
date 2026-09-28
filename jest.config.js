@@ -17,6 +17,7 @@
  */
 module.exports = {
   preset: 'jest-expo',
+  maxWorkers: 1,
   testMatch: ['**/*.screen.test.tsx'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   // The Expo/RN dependency tree ships untranspiled ESM; jest-expo's preset

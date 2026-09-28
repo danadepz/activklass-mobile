@@ -9,7 +9,6 @@ import type { UserProfile } from '../context/AuthContext'
  * only reason for the shape; nothing here is used outside the screen tests.
  */
 declare global {
-  // eslint-disable-next-line no-var
   var __authState: {
     user: { uid: string; email: string } | null
     profile: UserProfile | null
@@ -18,7 +17,6 @@ declare global {
   }
 
   /** Sign the next render in as someone else. Call before renderScreen(). */
-  // eslint-disable-next-line no-var
   var signedInAs: (profile: Partial<UserProfile> & { id: string; email: string }) => void
 }
 

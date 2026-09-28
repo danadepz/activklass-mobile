@@ -16,6 +16,7 @@ import { useConfirmLogout } from '../../src/hooks/useConfirmLogout';
 import { StatusBar } from 'expo-status-bar';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import ThemeToggle from '../../src/components/ThemeToggle';
+import { nameError, phoneError, normalizePhone } from '../../src/lib/validation';
 import { useThemeColors } from '../../src/theme';
 
 /**
@@ -32,7 +33,6 @@ import { useThemeColors } from '../../src/theme';
  * Postgres keyed on that identity (middleware/auth.py).
  */
 export default function ParentProfileScreen() {
-  const c = useThemeColors();
   useRequireAuth();
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
@@ -56,14 +56,30 @@ export default function ParentProfileScreen() {
   const handleSave = async () => {
     if (!profile) return;
 
-    if (!firstName.trim() || !lastName.trim()) {
+    const fnErr = nameError(firstName, { label: 'First name' });
+    if (fnErr) {
       setSuccess(null);
-      setError('First and last name are required.');
+      setError(fnErr);
       return;
     }
-    if (!contactNumber.trim()) {
+    const lnErr = nameError(lastName, { label: 'Last name' });
+    if (lnErr) {
       setSuccess(null);
-      setError('A contact number is required — the school uses it to reach you.');
+      setError(lnErr);
+      return;
+    }
+    if (middleName.trim()) {
+      const mnErr = nameError(middleName, { label: 'Middle name', required: false });
+      if (mnErr) {
+        setSuccess(null);
+        setError(mnErr);
+        return;
+      }
+    }
+    const phErr = phoneError(contactNumber);
+    if (phErr) {
+      setSuccess(null);
+      setError(phErr);
       return;
     }
 
@@ -78,7 +94,7 @@ export default function ParentProfileScreen() {
         // Blank clears the field rather than storing an empty string, matching
         // what the sign-up screen writes.
         middle_name: middleName.trim() || null,
-        contact_number: contactNumber.trim(),
+        contact_number: normalizePhone(contactNumber),
         updated_at: serverTimestamp(),
       });
 

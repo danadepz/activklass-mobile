@@ -72,7 +72,7 @@ export default function QuizFeedback() {
     };
 
     fetchAttemptAndQuiz();
-  }, [attemptId]);
+  }, [attemptId, router]);
 
   if (loading || !attempt || !quiz) {
     return (

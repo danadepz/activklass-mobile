@@ -110,7 +110,12 @@ export interface StudyGuide {
   id: string;
   class_id: string | null;
   topic: string | null;
+  title: string | null;
   status: string | null;
+  guidance: string | null;
+  weakness_description: string | null;
+  study_guide_markdown: string | null;
+  recommended_materials: any[] | null;
   /** 'YYYY-MM-DD', the shape the endpoint returned and the tab prints raw. */
   created_at: string | null;
 }
@@ -157,7 +162,14 @@ export async function loadClassStudyGuides(
         // Records written by /api/remediate before plans existed carry a title
         // and no topic. The endpoint fell back the same way.
         topic: data.topic || data.title || null,
+        title: data.title ?? null,
         status: data.status ?? null,
+        guidance: data.guidance ?? null,
+        weakness_description: data.weakness_description ?? null,
+        study_guide_markdown: data.study_guide_markdown ?? null,
+        recommended_materials: Array.isArray(data.recommended_materials)
+          ? data.recommended_materials
+          : null,
         created_at: toDateKey(data.created_at),
       };
     })

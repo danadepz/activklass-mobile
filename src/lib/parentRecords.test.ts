@@ -212,4 +212,24 @@ describe('loadClassStudyGuides', () => {
     getDocs.mockResolvedValue(guides([guide({ class_id: undefined })]))
     expect(await loadClassStudyGuides('student-1', 'c1')).toEqual([])
   })
+
+  it('preserves teacher guidance and detailed fields for the expandable view', async () => {
+    getDocs.mockResolvedValue(
+      guides([
+        guide({
+          guidance: 'Review Newton’s 2nd Law equations.',
+          weakness_description: 'Struggled with F=ma problem solving.',
+          study_guide_markdown: '# Newton Mechanics\nReview page 42.',
+          recommended_materials: [{ title: 'Physics Guide PDF', url: 'https://example.com/guide.pdf' }],
+        }),
+      ])
+    )
+    const rows = await loadClassStudyGuides('student-1', 'c1')
+    expect(rows[0].guidance).toBe('Review Newton’s 2nd Law equations.')
+    expect(rows[0].weakness_description).toBe('Struggled with F=ma problem solving.')
+    expect(rows[0].study_guide_markdown).toBe('# Newton Mechanics\nReview page 42.')
+    expect(rows[0].recommended_materials).toEqual([
+      { title: 'Physics Guide PDF', url: 'https://example.com/guide.pdf' },
+    ])
+  })
 })

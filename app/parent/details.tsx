@@ -21,6 +21,14 @@ import {
   createGuardianLink,
   lookupGuardianCode,
 } from '../../src/lib/guardianCodes';
+import {
+  nameError,
+  emailError,
+  passwordError,
+  phoneError,
+  normalizePhone,
+  PASSWORD_RULE,
+} from '../../src/lib/validation';
 import { useThemeColors } from '../../src/theme';
 
 /**
@@ -37,7 +45,6 @@ import { useThemeColors } from '../../src/theme';
  * link write is attempted or it is denied.
  */
 export default function ParentDetailsScreen() {
-  const c = useThemeColors();
   const router = useRouter();
   const params = useLocalSearchParams();
   const { refreshProfile } = useAuth();
@@ -53,22 +60,48 @@ export default function ParentDetailsScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [contactNumber, setContactNumber] = useState('');
   const [relationship, setRelationship] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmitDetails = async () => {
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password || !contactNumber.trim()) {
-      setError('Please fill in all required fields.');
+    const fnErr = nameError(firstName, { label: 'First name' });
+    if (fnErr) {
+      setError(fnErr);
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    const lnErr = nameError(lastName, { label: 'Last name' });
+    if (lnErr) {
+      setError(lnErr);
+      return;
+    }
+    if (middleName.trim()) {
+      const mnErr = nameError(middleName, { label: 'Middle name', required: false });
+      if (mnErr) {
+        setError(mnErr);
+        return;
+      }
+    }
+    const emErr = emailError(email);
+    if (emErr) {
+      setError(emErr);
+      return;
+    }
+    const pwErr = passwordError(password);
+    if (pwErr) {
+      setError(pwErr);
       return;
     }
     if (password !== confirmPassword) {
       setError('The two passwords do not match.');
+      return;
+    }
+    const phErr = phoneError(contactNumber);
+    if (phErr) {
+      setError(phErr);
       return;
     }
     if (!inviteCode) {
@@ -81,6 +114,7 @@ export default function ParentDetailsScreen() {
 
     const cleanEmail = email.trim().toLowerCase();
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    const cleanPhone = normalizePhone(contactNumber);
 
     try {
       // 1. Create the guardian's own Firebase Auth account. This also signs
@@ -98,7 +132,7 @@ export default function ParentDetailsScreen() {
         middle_name: middleName.trim() || null,
         role: 'parent',
         status: 'active',
-        contact_number: contactNumber.trim(),
+        contact_number: cleanPhone,
       });
 
       // 3. Re-read the code rather than trusting what step 1 passed through.
@@ -232,16 +266,21 @@ export default function ParentDetailsScreen() {
               label="Password *"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              isPassword
+              showPassword={showPassword}
+              onToggleShowPassword={() => setShowPassword((s) => !s)}
               autoCapitalize="none"
-              placeholder="At least 6 characters"
+              placeholder={PASSWORD_RULE}
             />
             <Field
               label="Confirm password *"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry
+              isPassword
+              showPassword={showConfirmPassword}
+              onToggleShowPassword={() => setShowConfirmPassword((s) => !s)}
               autoCapitalize="none"
+              placeholder="Re-enter password"
             />
             <Field
               label="Contact number *"
@@ -281,19 +320,44 @@ export default function ParentDetailsScreen() {
 
 function Field({
   label,
+  isPassword,
+  showPassword,
+  onToggleShowPassword,
   ...inputProps
-}: { label: string } & React.ComponentProps<typeof TextInput>) {
+}: {
+  label: string;
+  isPassword?: boolean;
+  showPassword?: boolean;
+  onToggleShowPassword?: () => void;
+} & React.ComponentProps<typeof TextInput>) {
   // Its own call: this Field lives outside the screen component, so the
   // palette is not in scope from there.
   const c = useThemeColors();
   return (
     <View className="mb-4">
       <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">{label}</Text>
-      <TextInput
-        placeholderTextColor={c.inkFaint}
-        className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-base"
-        {...inputProps}
-      />
+      <View className="relative">
+        <TextInput
+          placeholderTextColor={c.inkFaint}
+          className={`w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-base ${
+            isPassword ? 'pr-16' : ''
+          }`}
+          secureTextEntry={isPassword ? !showPassword : inputProps.secureTextEntry}
+          {...inputProps}
+        />
+        {isPassword && onToggleShowPassword && (
+          <TouchableOpacity
+            onPress={onToggleShowPassword}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            className="absolute right-4 top-4"
+          >
+            <Text className="text-ink-muted text-xs font-semibold">
+              {showPassword ? 'Hide' : 'Show'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }

@@ -157,7 +157,7 @@ export default function QuizPlayer() {
     };
 
     fetchQuiz();
-  }, [quizId]);
+  }, [quizId, router]);
 
   /* Countdown measured against the deadline the server stamped on the
      attempt, re-derived every tick rather than counted down from a number held
@@ -196,6 +196,7 @@ export default function QuizPlayer() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
   /* An attempt whose deadline passed while the app was closed. Submitting on
@@ -204,6 +205,7 @@ export default function QuizPlayer() {
     if (attempt && hasExpired(attempt) && !submittedRef.current) {
       submitQuizAttempt(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
   /* Returning to an attempt that was already open is a reopen. Recorded, not

@@ -25,10 +25,27 @@ jest.mock('./src/config/firebase', () => ({
   db: {},
 }))
 
+// Auth functions stubbed so screens calling updatePassword/signOut mount cleanly
+jest.mock('firebase/auth', () => ({
+  updatePassword: jest.fn(async () => {}),
+  signOut: jest.fn(async () => {}),
+  signInWithEmailAndPassword: jest.fn(async () => ({ user: { uid: 'test-user' } })),
+  createUserWithEmailAndPassword: jest.fn(async () => ({ user: { uid: 'new-user' } })),
+  onAuthStateChanged: jest.fn((auth, cb) => {
+    cb({ uid: 'test-student', email: 'student@test.dev' })
+    return () => {}
+  }),
+  EmailAuthProvider: {
+    credential: jest.fn(() => ({})),
+  },
+  reauthenticateWithCredential: jest.fn(async () => {}),
+}))
+
 // Firestore reads resolve empty rather than hanging. onSnapshot returns an
 // unsubscribe so cleanup does not throw on unmount.
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(() => ({})),
+  collectionGroup: jest.fn(() => ({})),
   doc: jest.fn(() => ({})),
   query: jest.fn(() => ({})),
   where: jest.fn(() => ({})),
@@ -127,12 +144,19 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 
-// Silence the act() and animation warnings that RN emits under test and that
-// nobody is going to action. Real errors still surface: only these two
+// Silence the act() and animation warnings that RN/React 19 emits under test and
+// that nobody is going to action. Real errors still surface: only these two
 // specific strings are dropped.
 const realWarn = console.warn
 console.warn = (...args) => {
   const first = String(args[0] ?? '')
   if (first.includes('useNativeDriver') || first.includes('not wrapped in act')) return
   realWarn(...args)
+}
+
+const realError = console.error
+console.error = (...args) => {
+  const first = String(args[0] ?? '')
+  if (first.includes('not configured to support act') || first.includes('not wrapped in act')) return
+  realError(...args)
 }

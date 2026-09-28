@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -67,7 +67,12 @@ export default function ParentClassDetail() {
   const [performance, setPerformance] = useState<PerformancePayload | null>(null);
   const [attendance, setAttendance] = useState<AttendancePayload | null>(null);
   const [studyGuides, setStudyGuides] = useState<StudyGuide[]>([]);
+  const [expandedGuides, setExpandedGuides] = useState<Record<string, boolean>>({});
   const [announcements, setAnnouncements] = useState<any[]>([]);
+
+  const toggleGuide = useCallback((id: string) => {
+    setExpandedGuides((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   const [loading, setLoading] = useState(true);
   // Per-tab denial, so one switched-off section does not blank the whole screen.
@@ -404,22 +409,129 @@ export default function ParentClassDetail() {
               {studyGuides.length === 0 ? (
                 <Empty text="No study guides assigned for this class." />
               ) : (
-                studyGuides.map((r) => (
-                  <View
-                    key={r.id}
-                    className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2"
-                  >
-                    <Text className="text-accent-text text-[10px] font-bold uppercase tracking-wider">
-                      {r.status ?? 'assigned'}
-                    </Text>
-                    <Text className="text-ink text-base font-bold font-sans mt-1">
-                      {r.topic ?? 'Study guide'}
-                    </Text>
-                    {r.created_at ? (
-                      <Text className="text-ink-faint text-[10px] mt-2">Assigned {r.created_at}</Text>
-                    ) : null}
-                  </View>
-                ))
+                studyGuides.map((r) => {
+                  const isExpanded = Boolean(expandedGuides[r.id]);
+                  return (
+                    <View
+                      key={r.id}
+                      className="bg-surface border border-hairline rounded-2xl mb-4 mt-2 overflow-hidden"
+                    >
+                      <TouchableOpacity
+                        onPress={() => toggleGuide(r.id)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Study guide ${r.topic ?? r.title ?? 'details'}`}
+                        className="p-5 flex-row items-center justify-between"
+                      >
+                        <View className="flex-1 pr-3">
+                          <View className="flex-row items-center">
+                            <Text className="text-accent-text text-[10px] font-bold uppercase tracking-wider">
+                              {r.status ?? 'assigned'}
+                            </Text>
+                            {r.created_at ? (
+                              <Text className="text-ink-faint text-[10px] ml-2">
+                                • Assigned {r.created_at}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text className="text-ink text-base font-bold font-sans mt-1">
+                            {r.topic ?? r.title ?? 'Study guide'}
+                          </Text>
+                        </View>
+                        <View className="w-8 h-8 rounded-full bg-sunken items-center justify-center border border-hairline">
+                          <Text className="text-ink-muted text-xs font-bold">
+                            {isExpanded ? '▲' : '▼'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      {isExpanded && (
+                        <View className="px-5 pb-5 pt-1 border-t border-hairline/60">
+                          {/* Teacher Guidance / Instructions */}
+                          {r.guidance ? (
+                            <View className="bg-accent/10 border border-accent/20 p-3.5 rounded-xl mt-3">
+                              <Text className="text-accent-text text-xs font-bold uppercase tracking-wider mb-1">
+                                📝 Teacher Guidance
+                              </Text>
+                              <Text className="text-ink text-xs leading-relaxed">
+                                {r.guidance}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Identified Weakness / Learning Gap */}
+                          {r.weakness_description ? (
+                            <View className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl mt-3">
+                              <Text className="text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
+                                🎯 Focus Area
+                              </Text>
+                              <Text className="text-ink text-xs leading-relaxed">
+                                {r.weakness_description}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Study Guide Content / Notes */}
+                          {r.study_guide_markdown ? (
+                            <View className="mt-3">
+                              <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider mb-1">
+                                📖 Study Notes
+                              </Text>
+                              <Text className="text-ink-muted text-xs leading-relaxed">
+                                {r.study_guide_markdown}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Recommended Materials */}
+                          {r.recommended_materials && r.recommended_materials.length > 0 ? (
+                            <View className="mt-3">
+                              <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider mb-1.5">
+                                📚 Recommended Learning Materials
+                              </Text>
+                              {r.recommended_materials.map((mat, idx) => (
+                                <View
+                                  key={idx}
+                                  className="bg-sunken p-2.5 rounded-lg border border-hairline mt-1"
+                                >
+                                  <Text className="text-ink text-xs font-semibold">
+                                    {typeof mat === 'string' ? mat : mat.title || mat.name || JSON.stringify(mat)}
+                                  </Text>
+                                  {mat.url ? (
+                                    <TouchableOpacity onPress={() => Linking.openURL(mat.url)}>
+                                      <Text className="text-accent-text text-[11px] mt-0.5 underline" numberOfLines={1}>
+                                        {mat.url}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ) : null}
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+
+                          {/* Fallback description if only topic/status exist */}
+                          {!r.guidance &&
+                            !r.weakness_description &&
+                            !r.study_guide_markdown &&
+                            (!r.recommended_materials || r.recommended_materials.length === 0) && (
+                              <View className="mt-2 py-2">
+                                <Text className="text-ink-muted text-xs leading-relaxed">
+                                  This study guide was assigned by the subject teacher to help reinforce key concepts in this topic. Students can access dedicated review modules and mastery quizzes on their student portal.
+                                </Text>
+                              </View>
+                            )}
+
+                          <View className="mt-4 pt-3 border-t border-hairline/40 flex-row justify-between items-center">
+                            <Text className="text-ink-faint text-[10px]">Status: {r.status ?? 'Active'}</Text>
+                            <TouchableOpacity onPress={() => toggleGuide(r.id)}>
+                              <Text className="text-accent-text text-xs font-semibold">Collapse Details ▲</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
               )}
             </View>
           ))}

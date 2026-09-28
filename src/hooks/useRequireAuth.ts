@@ -19,15 +19,29 @@ import { useAuth } from '../context/AuthContext';
  * context is loading before Firebase restores the session from AsyncStorage,
  * and redirecting then would throw out a user who is in fact signed in.
  */
-export function useRequireAuth() {
-  const { status } = useAuth();
+export function useRequireAuth({ allowTempPassword = false }: { allowTempPassword?: boolean } = {}) {
+  const { status, profile } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (status === 'signed_out' || status === 'not_registered') {
       router.replace('/');
+      return;
     }
-  }, [status, router]);
+
+    /* An account an admin or teacher provisioned starts on a temporary password,
+       and `is_temp_password` stays true until the user replaces it themselves.
+       Gate here so deep links, bookmarks, or reloads cannot bypass the password
+       change requirement. Protected routes call useRequireAuth(); only the
+       change-pass screens pass allowTempPassword: true to opt out. */
+    if (!allowTempPassword && profile?.is_temp_password) {
+      if (profile.role === 'parent') {
+        router.replace('/parent/change-pass');
+      } else if (profile.role === 'student') {
+        router.replace('/student/change-pass');
+      }
+    }
+  }, [status, profile, allowTempPassword, router]);
 
   return status;
 }

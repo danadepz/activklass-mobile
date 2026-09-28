@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { Svg, Circle } from 'react-native-svg';
 import { auth, db } from '../../src/config/firebase';
 import { teacherNameFor } from '../../src/lib/teachers';
 import { loadOverallStanding, standingLabel } from '../../src/lib/studentData';
-import { useAuth, UserProfile } from '../../src/context/AuthContext';
+import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { watchMyNotifications } from '../../src/lib/notifications';
 import {
@@ -18,6 +18,7 @@ import {
   revokeGuardianLink,
 } from '../../src/lib/guardianCodes';
 import { useThemeColors } from '../../src/theme';
+import ClassStandingForecast from '../../src/components/ClassStandingForecast';
 
 // Interface for classes data structure in dashboard
 interface ClassItem {
@@ -253,6 +254,17 @@ export default function StudentDashboard() {
           </View>
         </View>
 
+        {/* Projected Academic Standing (Early-Warning Model) */}
+        {profile?.id && (
+          <View className="mt-4">
+            <ClassStandingForecast
+              studentId={profile.id}
+              grade={overallGrade}
+              attendanceRate={attendanceRate}
+            />
+          </View>
+        )}
+
         {/* Consent Alert Banner (Conditional) */}
         {pendingGuardians.map((link) => (
           <View key={link.link_id} className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-5 mt-5">
@@ -301,7 +313,7 @@ export default function StudentDashboard() {
                 ✨ Adaptive Review Assigned
               </Text>
               <Text className="text-ink-soft text-xs leading-relaxed">
-                We've flagged some learning gaps in <Text className="font-semibold text-ink">{activeRemediations[0].topic}</Text>. Open your Custom Study Guide now.
+                We&apos;ve flagged some learning gaps in <Text className="font-semibold text-ink">{activeRemediations[0].topic}</Text>. Open your Custom Study Guide now.
               </Text>
             </View>
             <Text className="text-ink text-xl ml-2">→</Text>

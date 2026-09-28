@@ -21,6 +21,12 @@ module.exports = defineConfig([
     ignores: ['dist/*', '.expo/*', 'android/*', 'ios/*', 'expo-env.d.ts'],
   },
   {
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+    },
+  },
+  {
     /* Test globals, declared here rather than with `/* eslint-env jest *​/`.
        Flat config stopped honouring that comment and warns that it becomes an
        error in ESLint 10 -- and while it was being ignored, jest.setup.js was

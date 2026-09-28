@@ -1,21 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, collection, query, where, getDocs, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Svg, Line, Circle, Text as SvgText, Polygon, Polyline, Defs, LinearGradient, Stop, G } from 'react-native-svg';
 import { auth, db } from '../../../src/config/firebase';
 import { useAuth } from '../../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { useThemeColors } from '../../../src/theme';
+import { formatGrade, gradeTone, gradePolicy, itemPasses, passNote } from '../../../src/lib/gradeDisplay';
+import { loadSyllabus } from '../../../src/lib/studentData';
 
 export default function StudentClassDetail() {
   const c = useThemeColors();
   const router = useRouter();
-  const { classId } = useLocalSearchParams();
+  const { classId, tab } = useLocalSearchParams<{ classId: string; tab?: string; topic?: string }>();
   const { profile } = useAuth();
   
   const [classInfo, setClassInfo] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'syllabus' | 'grades' | 'attendance' | 'announcements'>('syllabus');
+  const initialTab = tab === 'topics' || tab === 'syllabus' ? 'syllabus' : tab === 'analytics' ? 'analytics' : tab === 'grades' ? 'grades' : tab === 'attendance' ? 'attendance' : tab === 'announcements' ? 'announcements' : 'syllabus';
+  const [activeTab, setActiveTab] = useState<'syllabus' | 'grades' | 'analytics' | 'attendance' | 'announcements'>(initialTab);
   const [loading, setLoading] = useState(true);
 
   // Syllabus / Topics State
@@ -27,16 +31,78 @@ export default function StudentClassDetail() {
   const [showContestModal, setShowContestModal] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
   const [contestReason, setContestReason] = useState('');
+  const [contestError, setContestError] = useState<string | null>(null);
   const [submittingContest, setSubmittingContest] = useState(false);
 
   // Attendance State
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [selectedAttendanceLog, setSelectedAttendanceLog] = useState<any>(null);
   const [attendanceReason, setAttendanceReason] = useState('');
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [submittingAttendanceContest, setSubmittingAttendanceContest] = useState(false);
 
   // Announcements State
   const [announcements, setAnnouncements] = useState<any[]>([]);
+
+  // Analytics Selection State
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+
+  // Analytics calculations
+  const analyticsData = useMemo(() => {
+    const assessments = (gradeEntry?.assessments ?? []) as any[];
+    const components = (gradeEntry?.components ?? []) as any[];
+    const graded = assessments
+      .filter((a) => a.status === 'graded' && a.raw_score != null && Number(a.total_points) > 0)
+      .sort((a, b) => (a.date_given ?? '').localeCompare(b.date_given ?? '') || String(a.title ?? '').localeCompare(String(b.title ?? '')));
+
+    const points = graded.map((a) => ({
+      title: a.title || 'Untitled Assessment',
+      date: a.date_given || null,
+      you: Math.round((Number(a.raw_score) / Number(a.total_points)) * 100),
+      avg: a.class_average != null ? Math.round((Number(a.class_average) / Number(a.total_points)) * 100) : null,
+      raw: a.raw_score,
+      total: a.total_points,
+    }));
+
+    const youAvg = points.length ? Math.round(points.reduce((s, p) => s + p.you, 0) / points.length) : null;
+    const withAvg = points.filter((p) => p.avg != null);
+    const classAvg = withAvg.length ? Math.round(withAvg.reduce((s, p) => s + p.avg!, 0) / withAvg.length) : null;
+    const diff = youAvg != null && classAvg != null ? youAvg - classAvg : null;
+
+    // Attendance rate
+    const countedAttendance = attendanceLogs.length;
+    const presentAttendance = attendanceLogs.filter((l) => l.status === 'present').length;
+    const attRate = countedAttendance > 0 ? Math.round((presentAttendance / countedAttendance) * 100) : null;
+
+    // Component performance
+    const compRows = components
+      .map((comp) => {
+        const compAsmts = assessments.filter((a) => a.component_id === comp.id || a.component === comp.name);
+        let earned = 0;
+        let possible = 0;
+        for (const a of compAsmts) {
+          if (a.status === 'graded' && a.raw_score != null) {
+            earned += Number(a.raw_score);
+            possible += Number(a.total_points);
+          } else if (a.status === 'missing') {
+            possible += Number(a.total_points);
+          }
+        }
+        const pct = possible > 0 ? Math.round((earned / possible) * 1000) / 10 : null;
+        return { name: comp.name, weight: comp.weight_percent, pct };
+      })
+      .filter((r) => r.pct != null);
+
+    return {
+      graded,
+      points,
+      youAvg,
+      classAvg,
+      diff,
+      attRate,
+      compRows,
+    };
+  }, [gradeEntry, attendanceLogs]);
 
   useEffect(() => {
     if (!classId) return;
@@ -44,16 +110,18 @@ export default function StudentClassDetail() {
     if (!user) return;
 
     // 1. Fetch Class Header Info
-    const unsubscribeClass = onSnapshot(doc(db, 'classes', classId as string), (docSnap) => {
+    const unsubscribeClass = onSnapshot(doc(db, 'classes', classId as string), async (docSnap) => {
       if (docSnap.exists()) {
         setClassInfo(docSnap.data());
+        const syl = await loadSyllabus(classId as string);
+        if (syl) setSyllabus(syl);
       }
     });
 
-    // 2. Fetch Syllabus Info
+    // 2. Fetch Syllabus Info (per-class fallback)
     const unsubscribeSyllabus = onSnapshot(doc(db, 'classes', classId as string, 'syllabus', 'current'), (docSnap) => {
       if (docSnap.exists()) {
-        setSyllabus(docSnap.data());
+        setSyllabus((prev: any) => prev || docSnap.data());
       }
     });
 
@@ -107,20 +175,22 @@ export default function StudentClassDetail() {
       }
     });
 
-    // 5. Fetch Daily Attendance Logs
+    // 5. Fetch Daily Attendance Logs (only recorded dates)
     const attendanceQuery = query(
       collection(db, 'classes', classId as string, 'attendance')
     );
     const unsubscribeAttendance = onSnapshot(attendanceQuery, (snapshot) => {
-      const list = snapshot.docs.map(docSnap => {
+      const list: any[] = [];
+      snapshot.docs.forEach((docSnap) => {
         const data = docSnap.data();
-        const studentRecord = data.records?.[user.uid] || data.status?.[user.uid] || {};
-        return {
+        const studentRecord = data.records?.[user.uid] || data.status?.[user.uid];
+        if (!studentRecord?.status) return;
+        list.push({
           date: docSnap.id,
-          status: studentRecord.status || 'absent',
+          status: studentRecord.status,
           remarks: studentRecord.remarks || '',
           excuse_url: studentRecord.excuse_url || null,
-        };
+        });
       });
       // Sort chronologically in descending order
       list.sort((a, b) => b.date.localeCompare(a.date));
@@ -155,11 +225,29 @@ export default function StudentClassDetail() {
 
   // Handle grade dispute submission
   const handleSubmitContest = async () => {
-    if (!contestReason.trim() || !selectedAssessment) return;
+    if (!selectedAssessment) return;
+    const trimmed = contestReason.trim();
+    if (!trimmed) {
+      setContestError('Please explain why you are contesting this score.');
+      return;
+    }
+    if (trimmed.length < 5) {
+      setContestError('Please provide a more detailed explanation (at least 5 characters).');
+      return;
+    }
+    if (trimmed.length > 500) {
+      setContestError('Explanation is too long (at most 500 characters).');
+      return;
+    }
+
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      setContestError('No active user session found. Please sign in again.');
+      return;
+    }
 
     setSubmittingContest(true);
+    setContestError(null);
     try {
       /* grade_contests, NOT 'disputes'. firestore.rules grants no path called
          'disputes', so every write here used to hit the default deny -- and the
@@ -184,7 +272,7 @@ export default function StudentClassDetail() {
           ? selectedAssessment.raw_score ?? null
           : null,
         total_points: selectedAssessment.total_points ?? null,
-        reason: contestReason.trim(),
+        reason: trimmed,
         excuse_url: null,
         // The rules check this literal on create -- a student may only ever
         // open a dispute, never pre-resolve one.
@@ -195,12 +283,12 @@ export default function StudentClassDetail() {
       Alert.alert('Success', 'Your grade dispute has been submitted directly to your teacher\'s portal.');
       setShowContestModal(false);
       setContestReason('');
+      setContestError(null);
       setSelectedAssessment(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error submitting grade contest:', e);
-      Alert.alert(
-        'Not submitted',
-        'Your grade dispute could not be filed. Check your connection and try again.',
+      setContestError(
+        e?.message || 'Your grade dispute could not be filed. Check your connection and try again.',
       );
     } finally {
       setSubmittingContest(false);
@@ -223,11 +311,29 @@ export default function StudentClassDetail() {
      what flips the day to excused, and the teacher's web attendance screen
      already does exactly that. */
   const handleSubmitAttendanceContest = async () => {
-    if (!attendanceReason.trim() || !selectedAttendanceLog) return;
+    if (!selectedAttendanceLog) return;
+    const trimmed = attendanceReason.trim();
+    if (!trimmed) {
+      setAttendanceError('Please explain why you are contesting this record.');
+      return;
+    }
+    if (trimmed.length < 5) {
+      setAttendanceError('Please provide a more detailed explanation (at least 5 characters).');
+      return;
+    }
+    if (trimmed.length > 500) {
+      setAttendanceError('Explanation is too long (at most 500 characters).');
+      return;
+    }
+
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      setAttendanceError('No active user session found. Please sign in again.');
+      return;
+    }
 
     setSubmittingAttendanceContest(true);
+    setAttendanceError(null);
     try {
       // Same id convention as activklass-web: one contest per student per day,
       // so re-filing replaces the earlier one rather than queueing a duplicate.
@@ -238,7 +344,7 @@ export default function StudentClassDetail() {
         student_name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || null,
         date: selectedAttendanceLog.date,
         current_status: selectedAttendanceLog.status ?? null,
-        reason: attendanceReason.trim(),
+        reason: trimmed,
         // Web attaches an uploaded file here; this screen has no file picker
         // yet, so the reason text carries the justification on its own.
         excuse_url: null,
@@ -254,11 +360,11 @@ export default function StudentClassDetail() {
       );
       setSelectedAttendanceLog(null);
       setAttendanceReason('');
-    } catch (e) {
+      setAttendanceError(null);
+    } catch (e: any) {
       console.error('Error filing attendance contest:', e);
-      Alert.alert(
-        'Not submitted',
-        'Your attendance contest could not be filed. Check your connection and try again.',
+      setAttendanceError(
+        e?.message || 'Your attendance contest could not be filed. Check your connection and try again.',
       );
     } finally {
       setSubmittingAttendanceContest(false);
@@ -329,18 +435,26 @@ export default function StudentClassDetail() {
       </View>
 
       {/* Segmented Controls tab bar */}
-      <View className="flex-row bg-surface border-b border-hairline">
-        {(['syllabus', 'grades', 'attendance', 'announcements'] as const).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab)}
-            className={`flex-1 py-4 items-center ${activeTab === tab ? 'border-b-2 border-accent' : ''}`}
-          >
-            <Text className={`text-xs font-bold capitalize ${activeTab === tab ? 'text-accent-text' : 'text-ink-faint'}`}>
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View className="bg-surface border-b border-hairline">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+          {([
+            { id: 'syllabus', label: 'Modules' },
+            { id: 'grades', label: 'Grades' },
+            { id: 'analytics', label: 'Analytics' },
+            { id: 'attendance', label: 'Attendance' },
+            { id: 'announcements', label: 'Bulletins' },
+          ] as const).map((tabItem) => (
+            <TouchableOpacity
+              key={tabItem.id}
+              onPress={() => setActiveTab(tabItem.id)}
+              className={`px-4 py-3.5 items-center ${activeTab === tabItem.id ? 'border-b-2 border-accent' : ''}`}
+            >
+              <Text className={`text-xs font-bold ${activeTab === tabItem.id ? 'text-accent-text' : 'text-ink-faint'}`}>
+                {tabItem.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       <ScrollView className="flex-1 px-6 py-4">
@@ -408,12 +522,35 @@ export default function StudentClassDetail() {
               <View>
                 <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider">Computed Term Grade</Text>
                 <Text className="text-ink text-3xl font-extrabold mt-1 font-sans">
-                  {gradeEntry?.final_grade ?? '—'}
+                  {formatGrade(gradeEntry?.final_grade, gradeEntry?.mode)}
+                </Text>
+                <Text className="text-ink-faint text-[10px] mt-1">
+                  {passNote(gradeEntry?.mode, gradeEntry)}
                 </Text>
               </View>
-              <View className="bg-success/10 px-4 py-2 rounded-xl">
-                <Text className="text-success text-xs font-bold uppercase">Passing</Text>
-              </View>
+              {gradeEntry?.final_grade != null && (
+                <View className={`px-4 py-2 rounded-xl border ${
+                  gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                    : gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'accent'
+                    ? 'bg-indigo-500/10 border-indigo-500/30'
+                    : gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'warning'
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-red-500/10 border-red-500/30'
+                }`}>
+                  <Text className={`text-xs font-bold uppercase ${
+                    gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'success'
+                      ? 'text-emerald-500'
+                      : gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'accent'
+                      ? 'text-indigo-500'
+                      : gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).tone === 'warning'
+                      ? 'text-amber-500'
+                      : 'text-rose-500'
+                  }`}>
+                    {gradeTone(gradeEntry.final_grade, gradeEntry.mode, gradeEntry).label}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* List of Assessments */}
@@ -436,6 +573,8 @@ export default function StudentClassDetail() {
                     <TouchableOpacity
                       onPress={() => {
                         setSelectedAssessment(asm);
+                        setContestReason('');
+                        setContestError(null);
                         setShowContestModal(true);
                       }}
                       className="bg-sunken border border-hairline px-3 py-1.5 rounded-lg"
@@ -444,12 +583,12 @@ export default function StudentClassDetail() {
                     </TouchableOpacity>
                   </View>
                   
-                  {/* Simple Custom Bar Visualizer */}
-                  {asm.raw_score !== undefined && (
+                  {/* Score Bar Visualizer */}
+                  {asm.raw_score !== undefined && asm.total_points > 0 && (
                     <View className="w-full h-2 bg-sunken rounded-full mt-3 overflow-hidden">
                       <View 
                         style={{ width: `${Math.min(100, (asm.raw_score / asm.total_points) * 100)}%` }}
-                        className={`h-full ${asm.raw_score / asm.total_points >= 0.75 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                        className={`h-full ${itemPasses(asm.raw_score, asm.total_points, gradeEntry) ? 'bg-emerald-500' : 'bg-amber-500'}`}
                       />
                     </View>
                   )}
@@ -468,13 +607,24 @@ export default function StudentClassDetail() {
                 <Text className="text-ink text-sm font-bold mt-1 mb-2 font-sans">
                   Contesting: {selectedAssessment.title}
                 </Text>
-                <Text className="text-ink-muted text-xs leading-normal mb-4">
+                <Text className="text-ink-muted text-xs leading-normal mb-3">
                   Provide your teacher with details regarding the score discrepancy.
                 </Text>
+
+                {contestError && (
+                  <View className="bg-red-500/10 border border-red-500/30 p-3 rounded-xl mb-3">
+                    <Text className="text-danger text-xs font-semibold leading-relaxed">
+                      {contestError}
+                    </Text>
+                  </View>
+                )}
                 
                 <TextInput
                   value={contestReason}
-                  onChangeText={setContestReason}
+                  onChangeText={(text) => {
+                    setContestReason(text);
+                    if (contestError) setContestError(null);
+                  }}
                   placeholder="Justification details here..."
                   placeholderTextColor={c.inkFaint}
                   multiline
@@ -499,6 +649,7 @@ export default function StudentClassDetail() {
                       setShowContestModal(false);
                       setSelectedAssessment(null);
                       setContestReason('');
+                      setContestError(null);
                     }}
                     className="flex-1 bg-canvas border border-hairline py-3 rounded-xl items-center"
                   >
@@ -508,6 +659,304 @@ export default function StudentClassDetail() {
               </View>
             )}
 
+          </View>
+        )}
+
+        {/* SUBJECT ANALYTICS TAB CONTENT */}
+        {activeTab === 'analytics' && (
+          <View className="pb-10">
+            {/* Metric Summary Cards */}
+            <View className="mt-3 mb-4">
+              <View className="flex-row gap-3">
+                {/* Current Grade */}
+                <View className="flex-1 bg-surface border border-hairline p-4 rounded-2xl">
+                  <Text className="text-ink-muted text-[10px] font-bold uppercase tracking-wider">Current Grade</Text>
+                  <Text className="text-ink text-2xl font-extrabold mt-1 font-sans">
+                    {formatGrade(gradeEntry?.final_grade, gradeEntry?.mode)}
+                  </Text>
+                  <Text className="text-ink-faint text-[9px] mt-0.5" numberOfLines={1}>
+                    {passNote(gradeEntry?.mode, gradeEntry)}
+                  </Text>
+                </View>
+
+                {/* Your Average */}
+                <View className="flex-1 bg-surface border border-hairline p-4 rounded-2xl">
+                  <Text className="text-ink-muted text-[10px] font-bold uppercase tracking-wider">Your Average</Text>
+                  <Text className="text-ink text-2xl font-extrabold mt-1 font-sans">
+                    {analyticsData.youAvg != null ? `${analyticsData.youAvg}%` : '—'}
+                  </Text>
+                  <Text className="text-ink-faint text-[9px] mt-0.5">Across graded items</Text>
+                </View>
+              </View>
+
+              <View className="flex-row gap-3 mt-3">
+                {/* vs Class */}
+                <View className="flex-1 bg-surface border border-hairline p-4 rounded-2xl">
+                  <Text className="text-ink-muted text-[10px] font-bold uppercase tracking-wider">vs Class Avg</Text>
+                  <Text className={`text-2xl font-extrabold mt-1 font-sans ${
+                    analyticsData.diff == null ? 'text-ink-faint' : analyticsData.diff >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                  }`}>
+                    {analyticsData.diff == null
+                      ? '—'
+                      : `${analyticsData.diff >= 0 ? '+' : ''}${analyticsData.diff}%`}
+                  </Text>
+                  <Text className="text-ink-faint text-[9px] mt-0.5">
+                    {analyticsData.classAvg != null ? `Class avg ${analyticsData.classAvg}%` : 'No class avg yet'}
+                  </Text>
+                </View>
+
+                {/* Attendance Rate */}
+                <View className="flex-1 bg-surface border border-hairline p-4 rounded-2xl">
+                  <Text className="text-ink-muted text-[10px] font-bold uppercase tracking-wider">Attendance</Text>
+                  <Text className="text-ink text-2xl font-extrabold mt-1 font-sans">
+                    {analyticsData.attRate != null ? `${analyticsData.attRate}%` : '—'}
+                  </Text>
+                  <Text className="text-ink-faint text-[9px] mt-0.5">
+                    {attendanceLogs.length} {attendanceLogs.length === 1 ? 'day recorded' : 'days recorded'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Empty state when no graded assessments exist */}
+            {analyticsData.points.length === 0 ? (
+              <View className="bg-surface border border-hairline rounded-2xl p-8 items-center justify-center my-4">
+                <Text className="text-3xl mb-3">📊</Text>
+                <Text className="text-ink text-sm font-bold text-center">No Analytics Recorded Yet</Text>
+                <Text className="text-ink-faint text-xs text-center mt-1.5 leading-relaxed max-w-xs">
+                  Once your instructor grades and returns assessments, your comparative trends and mastery charts will appear here.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* SVG Performance Line Chart */}
+                <View className="bg-surface border border-hairline rounded-2xl p-4 mb-4 shadow-sm">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <Text className="text-ink text-xs font-bold uppercase tracking-wider">Performance Trend</Text>
+                    <View className="flex-row items-center gap-3">
+                      <View className="flex-row items-center gap-1">
+                        <View className="w-2.5 h-2.5 rounded-full bg-[#1C5CAB]" />
+                        <Text className="text-ink-muted text-[10px]">You</Text>
+                      </View>
+                      <View className="flex-row items-center gap-1">
+                        <View className="w-2.5 h-2.5 rounded-full bg-[#8C8C86]" />
+                        <Text className="text-ink-muted text-[10px]">Class</Text>
+                      </View>
+                      <View className="flex-row items-center gap-1">
+                        <View className="w-3 h-0 border-t border-dashed border-amber-600" />
+                        <Text className="text-amber-600 text-[10px] font-bold">
+                          Pass {gradePolicy(gradeEntry).passing_percent}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* SVG Chart */}
+                  {(() => {
+                    const points = analyticsData.points;
+                    const W = 320;
+                    const H = 140;
+                    const padL = 26;
+                    const padR = 12;
+                    const padT = 12;
+                    const padB = 22;
+                    const innerW = W - padL - padR;
+                    const innerH = H - padT - padB;
+                    const passMark = gradePolicy(gradeEntry).passing_percent;
+
+                    const x = (i: number) => padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
+                    const y = (v: number) => padT + (1 - Math.max(0, Math.min(100, v)) / 100) * innerH;
+
+                    const youLine = points.map((p, i) => `${x(i)},${y(p.you)}`).join(' ');
+                    const youArea = `${padL},${y(0)} ${youLine} ${x(points.length - 1)},${y(0)}`;
+                    const avgPoints = points
+                      .map((p, i) => (p.avg != null ? `${x(i)},${y(p.avg)}` : null))
+                      .filter(Boolean)
+                      .join(' ');
+
+                    const activeIndex = selectedPointIndex ?? points.length - 1;
+                    const activePoint = points[activeIndex];
+
+                    return (
+                      <View>
+                        <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+                          <Defs>
+                            <LinearGradient id="youGradient" x1="0" y1="0" x2="0" y2="1">
+                              <Stop offset="0" stopColor="#1C5CAB" stopOpacity="0.25" />
+                              <Stop offset="1" stopColor="#1C5CAB" stopOpacity="0.0" />
+                            </LinearGradient>
+                          </Defs>
+
+                          {/* Grid lines */}
+                          {[0, 50, 100].map((g) => (
+                            <G key={g}>
+                              <Line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="rgba(148,163,184,0.18)" strokeWidth="1" />
+                              <SvgText x={padL - 4} y={y(g) + 3} textAnchor="end" fontSize="8" fill="#94A3B8" fontWeight="600">
+                                {g}
+                              </SvgText>
+                            </G>
+                          ))}
+
+                          {/* Passing threshold line */}
+                          <Line
+                            x1={padL}
+                            y1={y(passMark)}
+                            x2={W - padR}
+                            y2={y(passMark)}
+                            stroke="#D97706"
+                            strokeWidth="1.2"
+                            strokeDasharray="4,3"
+                          />
+
+                          {/* Gradient fill under student line */}
+                          {points.length >= 2 && <Polygon points={youArea} fill="url(#youGradient)" />}
+
+                          {/* Class average polyline */}
+                          {avgPoints ? (
+                            <Polyline points={avgPoints} fill="none" stroke="#8C8C86" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          ) : null}
+
+                          {/* Student polyline */}
+                          {points.length >= 2 ? (
+                            <Polyline points={youLine} fill="none" stroke="#1C5CAB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                          ) : null}
+
+                          {/* Point dots */}
+                          {points.map((p, i) => (
+                            <G key={i}>
+                              {p.avg != null && (
+                                <Circle cx={x(i)} cy={y(p.avg)} r="3" fill="#FFFFFF" stroke="#8C8C86" strokeWidth="1.5" />
+                              )}
+                              <Circle
+                                cx={x(i)}
+                                cy={y(p.you)}
+                                r={activeIndex === i ? 5 : 3.5}
+                                fill={activeIndex === i ? "#4F46E5" : "#1C5CAB"}
+                                stroke="#FFFFFF"
+                                strokeWidth="1.5"
+                              />
+                              <SvgText
+                                x={x(i)}
+                                y={H - 6}
+                                textAnchor="middle"
+                                fontSize="8"
+                                fill={activeIndex === i ? "#4F46E5" : "#94A3B8"}
+                                fontWeight={activeIndex === i ? "bold" : "normal"}
+                              >
+                                {i + 1}
+                              </SvgText>
+                            </G>
+                          ))}
+                        </Svg>
+
+                        {/* Selected Point Info Banner */}
+                        {activePoint && (
+                          <View className="bg-sunken/70 border border-hairline rounded-xl p-2.5 mt-2 flex-row justify-between items-center">
+                            <View className="flex-1 pr-2">
+                              <Text className="text-ink text-xs font-bold" numberOfLines={1}>
+                                {activeIndex + 1}. {activePoint.title}
+                              </Text>
+                              {activePoint.date && (
+                                <Text className="text-ink-faint text-[9px]">{activePoint.date}</Text>
+                              )}
+                            </View>
+                            <View className="flex-row items-center gap-3">
+                              <Text className="text-indigo-600 text-xs font-bold">You: {activePoint.you}%</Text>
+                              <Text className="text-ink-muted text-xs">
+                                Class: {activePoint.avg != null ? `${activePoint.avg}%` : '—'}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })()}
+                </View>
+
+                {/* Item Scores Breakdown */}
+                <View className="bg-surface border border-hairline rounded-2xl p-4 mb-4">
+                  <Text className="text-ink text-xs font-bold uppercase tracking-wider mb-3">Item Scores</Text>
+                  <View className="space-y-2">
+                    {analyticsData.points.map((p, i) => (
+                      <TouchableOpacity
+                        key={i}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedPointIndex(i)}
+                        className={`p-3 rounded-xl border flex-row items-center justify-between ${
+                          selectedPointIndex === i
+                            ? 'bg-indigo-500/10 border-indigo-500/30'
+                            : 'bg-sunken/40 border-hairline'
+                        }`}
+                      >
+                        <View className="flex-1 pr-3">
+                          <View className="flex-row items-center gap-2">
+                            <Text className="text-ink-faint text-[10px] font-mono font-bold">#{i + 1}</Text>
+                            <Text className="text-ink text-xs font-bold" numberOfLines={1}>
+                              {p.title}
+                            </Text>
+                          </View>
+                          <Text className="text-ink-faint text-[9px] mt-0.5">
+                            Raw score: {p.raw} / {p.total} pts
+                          </Text>
+                        </View>
+                        <View className="items-end">
+                          <Text className={`text-xs font-bold ${
+                            itemPasses(p.raw, p.total, gradeEntry) ? 'text-emerald-500' : 'text-amber-500'
+                          }`}>
+                            {p.you}%
+                          </Text>
+                          <Text className="text-ink-faint text-[9px]">
+                            Avg: {p.avg != null ? `${p.avg}%` : '—'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Component Breakdown */}
+                {analyticsData.compRows.length > 0 && (
+                  <View className="bg-surface border border-hairline rounded-2xl p-4 mb-4">
+                    <Text className="text-ink text-xs font-bold uppercase tracking-wider mb-3">
+                      Component Breakdown
+                    </Text>
+                    <View className="space-y-3">
+                      {analyticsData.compRows.map((comp, ci) => (
+                        <View key={ci} className="bg-sunken/40 border border-hairline p-3 rounded-xl">
+                          <View className="flex-row justify-between items-center mb-1.5">
+                            <Text className="text-ink text-xs font-bold">{comp.name}</Text>
+                            <View className="flex-row items-center gap-2">
+                              {comp.weight != null && (
+                                <Text className="text-ink-faint text-[10px]">
+                                  {comp.weight}% weight
+                                </Text>
+                              )}
+                              <Text className={`text-xs font-bold ${
+                                (comp.pct ?? 0) >= (gradePolicy(gradeEntry).passing_percent)
+                                  ? 'text-emerald-500'
+                                  : 'text-amber-500'
+                              }`}>
+                                {comp.pct}%
+                              </Text>
+                            </View>
+                          </View>
+                          <View className="w-full h-2 bg-sunken rounded-full overflow-hidden">
+                            <View
+                              style={{ width: `${Math.min(100, Math.max(0, comp.pct ?? 0))}%` }}
+                              className={`h-full ${
+                                (comp.pct ?? 0) >= (gradePolicy(gradeEntry).passing_percent)
+                                  ? 'bg-emerald-500'
+                                  : 'bg-amber-500'
+                              }`}
+                            />
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
           </View>
         )}
 
@@ -557,6 +1006,7 @@ export default function StudentClassDetail() {
                         onPress={() => {
                           setSelectedAttendanceLog(log);
                           setAttendanceReason('');
+                          setAttendanceError(null);
                         }}
                         className="bg-accent/15 border border-accent/30 px-3 py-1.5 rounded-lg"
                       >
@@ -576,14 +1026,25 @@ export default function StudentClassDetail() {
                 <Text className="text-ink text-sm font-bold mt-1 mb-2 font-sans">
                   {selectedAttendanceLog.date} · marked {selectedAttendanceLog.status}
                 </Text>
-                <Text className="text-ink-muted text-xs leading-normal mb-4">
+                <Text className="text-ink-muted text-xs leading-normal mb-3">
                   Explain why this should be excused. Your teacher reviews it — the date
                   changes only once they approve.
                 </Text>
 
+                {attendanceError && (
+                  <View className="bg-red-500/10 border border-red-500/30 p-3 rounded-xl mb-3">
+                    <Text className="text-danger text-xs font-semibold leading-relaxed">
+                      {attendanceError}
+                    </Text>
+                  </View>
+                )}
+
                 <TextInput
                   value={attendanceReason}
-                  onChangeText={setAttendanceReason}
+                  onChangeText={(text) => {
+                    setAttendanceReason(text);
+                    if (attendanceError) setAttendanceError(null);
+                  }}
                   placeholder="Reason and any supporting detail..."
                   placeholderTextColor={c.inkFaint}
                   multiline
@@ -607,6 +1068,7 @@ export default function StudentClassDetail() {
                     onPress={() => {
                       setSelectedAttendanceLog(null);
                       setAttendanceReason('');
+                      setAttendanceError(null);
                     }}
                     className="flex-1 bg-canvas border border-hairline py-3 rounded-xl items-center"
                   >

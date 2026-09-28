@@ -8,14 +8,26 @@ import { auth, db } from '../src/config/firebase';
 import { useAuth } from '../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { useThemeColors } from '../src/theme';
+import { toAuthEmail, wrongCredentialMessage } from '../src/lib/logins';
 
 const FRIENDLY_ERRORS: Record<string, string> = {
-  'auth/invalid-credential': 'Incorrect identifier or password.',
-  'auth/user-not-found': 'No account found with that identifier.',
-  'auth/wrong-password': 'Incorrect identifier or password.',
+  'auth/user-not-found': 'No account found with that login.',
   'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
-  'auth/invalid-email': 'That email address is not valid.',
+  'auth/invalid-email': 'That email or login ID is not valid.',
+  // Deactivate (admin Users tab, solo teacher's Student accounts) disables the
+  // Firebase user; unmapped, the student only saw the generic line below.
+  'auth/user-disabled': 'This account has been deactivated. Ask your teacher or school to reactivate it.',
 };
+
+/* Firebase returns the same code for a wrong password and a wrong identifier,
+   so the message names both kinds of account rather than guessing. The
+   wording lives in lib/logins beside toAuthEmail, where a test can reach it. */
+const WRONG_CREDENTIAL = new Set(['auth/invalid-credential', 'auth/wrong-password']);
+
+function signInError(code: string, identifier: string): string {
+  if (WRONG_CREDENTIAL.has(code)) return wrongCredentialMessage(identifier);
+  return FRIENDLY_ERRORS[code] ?? 'Sign in failed. Please try again.';
+}
 
 export default function LoginScreen() {
   const c = useThemeColors();
@@ -37,26 +49,20 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
 
-    /* Everyone signs in with a real email address.
-       The old p-<student_number> -> p-<student_number>@activklass.com
-       translation is gone: that scheme encoded exactly one parent per student,
-       and guardians now register with their own email and link by redeeming a
-       6-character code (see app/parent/details.tsx). Accounts created under the
-       old scheme still sign in — their p-...@activklass.com address is a real
-       address — they just have to type it in full. */
-    const loginEmail = identifier.trim().toLowerCase();
-    if (!loginEmail.includes('@')) {
-      setError('Please enter your full email address.');
-      setLoading(false);
-      return;
-    }
+    /* Two kinds of account sign in here. A guardian registered with a real
+       email address. A student's account was issued by their school and signs
+       in with a login ID like `srnhs-200012` -- there is no mail domain, so
+       toAuthEmail appends an internal suffix Firebase can key on. The web
+       login page does exactly the same (lib/logins.js). This screen used to
+       refuse anything without an '@', which locked every student out. */
+    const loginEmail = toAuthEmail(identifier);
 
     try {
-      // 1. Sign in with Firebase Auth
+      // 1. Sign in
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password);
       const user = userCredential.user;
 
-      // 2. Fetch the Firestore user profile to enforce roles
+      // 2. Fetch the user profile to enforce roles
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
         await auth.signOut();
@@ -81,7 +87,11 @@ export default function LoginScreen() {
 
       // 4. Redirect based on role
       if (profileData.is_temp_password) {
-        router.replace('/parent/change-pass');
+        if (role === 'student') {
+          router.replace('/student/change-pass');
+        } else {
+          router.replace('/parent/change-pass');
+        }
       } else if (role === 'student') {
         router.replace('/student/dashboard');
       } else if (role === 'parent') {
@@ -92,8 +102,7 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       console.error('[Login] Auth error:', err);
-      const code = err.code || '';
-      setError(FRIENDLY_ERRORS[code] ?? 'Sign in failed. Please verify your credentials.');
+      setError(signInError(err.code || '', identifier));
     } finally {
       setLoading(false);
     }
@@ -141,20 +150,29 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Email/Username input */}
+            {/* Credential identifier input */}
             <View>
               <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
-                Email
+                Email or Student Login ID
               </Text>
               <TextInput
                 value={identifier}
                 onChangeText={setIdentifier}
-                placeholder="you@example.com"
+                placeholder="snhs-123456 or you@example.com"
                 placeholderTextColor={c.inkFaint}
                 autoCapitalize="none"
-                keyboardType="email-address"
+                autoCorrect={false}
+                keyboardType="default"
                 className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-sm focus:border-accent"
               />
+              <View className="mt-2 space-y-1">
+                <Text className="text-ink-faint text-[11px] leading-relaxed">
+                  • <Text className="font-semibold text-ink-soft">Students:</Text> Enter your school login ID (e.g. srnhs-200012). Default password: pass1234
+                </Text>
+                <Text className="text-ink-faint text-[11px] leading-relaxed">
+                  • <Text className="font-semibold text-ink-soft">Parents:</Text> Enter your registered email address.
+                </Text>
+              </View>
             </View>
 
             {/* Password input */}
@@ -164,7 +182,10 @@ export default function LoginScreen() {
                   Password
                 </Text>
                 <TouchableOpacity onPress={() => {
-                  Alert.alert("Password Reset", "Please contact your school administrator or teacher to reset your system credentials.");
+                  Alert.alert(
+                    "Password Reset",
+                    "• Students: Contact your subject teacher or school administrator to reset your password.\n\n• Parents: Use the web portal or contact school administration."
+                  );
                 }}>
                   <Text className="text-accent-text text-xs font-semibold">Forgot?</Text>
                 </TouchableOpacity>
@@ -176,7 +197,7 @@ export default function LoginScreen() {
                   placeholder="Enter your password"
                   placeholderTextColor={c.inkFaint}
                   secureTextEntry={!showPassword}
-                  className="w-full bg-surface border border-hairline p-4 rounded-xl text-ink text-sm focus:border-accent"
+                  className="w-full bg-surface border border-hairline p-4 pr-16 rounded-xl text-ink text-sm focus:border-accent"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}

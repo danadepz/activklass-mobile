@@ -11,15 +11,15 @@ import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { useThemeColors } from '../../src/theme';
 import { passwordError } from '../../src/lib/validation';
 
-export default function ParentChangePassScreen() {
+export default function StudentChangePassScreen() {
   const c = useThemeColors();
   useRequireAuth({ allowTempPassword: true });
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
 
-  // Two ways in: forced here at sign-in on a provisioned account, or reached
-  // deliberately from the profile screen. Only the first is a first-time setup,
-  // and only the first should land on the dashboard afterwards.
+  // Two ways in: forced at sign-in on an issued student account, or reached
+  // deliberately from the student profile screen. Only the first is a first-time setup,
+  // and only the first should land on the student dashboard afterwards.
   const isForced = Boolean(profile?.is_temp_password);
 
   const [newPassword, setNewPassword] = useState('');
@@ -61,29 +61,29 @@ export default function ParentChangePassScreen() {
       await updatePassword(currentUser, newPassword);
 
       // 2. Remove is_temp_password flag from Firestore user profile, and stamp
-      //    when it happened. Best-effort after the fact, matching web.
+      //    when it happened. Best-effort after Auth update, matching web.
       try {
         await updateDoc(doc(db, 'users', currentUser.uid), {
           is_temp_password: false,
           password_changed_at: serverTimestamp(),
         });
       } catch (flagErr) {
-        console.warn('[ParentChangePass] password state not recorded:', flagErr);
+        console.warn('[StudentChangePass] password state not recorded:', flagErr);
       }
 
       // 3. Refresh context profile so that status updates
       await refreshProfile();
 
-      // 4. Forced first-time setup ends at the dashboard; a voluntary change
-      //    returns to wherever they came from.
+      // 4. Forced first-time setup ends at the student dashboard; a voluntary change
+      //    returns to wherever they came from (e.g. profile).
       if (isForced) {
-        router.replace('/parent/dashboard');
+        router.replace('/student/dashboard');
       } else {
         router.back();
       }
 
     } catch (err: any) {
-      console.error('[ParentChangePass] Error updating password:', err);
+      console.error('[StudentChangePass] Error updating password:', err);
       if (err.code === 'auth/requires-recent-login') {
         setError('Security threshold reached. Please sign out and sign back in to change your password.');
       } else {
@@ -97,11 +97,6 @@ export default function ParentChangePassScreen() {
   return (
     <SafeAreaView className="flex-1 bg-canvas">
       <StatusBar style="auto" />
-      {/* Padding and justify-between belong to the CONTENT container, not the
-          ScrollView. React Native throws a render error for child layout props
-          set on the scroll view itself, and NativeWind was compiling the
-          className straight onto it. flex-grow replaces the old
-          contentContainerStyle={{ flexGrow: 1 }}, which did the same job. */}
       <ScrollView contentContainerClassName="flex-grow px-6 py-10 justify-between">
         
         {/* Header */}
@@ -110,15 +105,15 @@ export default function ParentChangePassScreen() {
             Set New Password
           </Text>
           <Text className="text-ink-muted text-sm mt-2 font-sans">
-            Update your password to secure your account.
+            Update your password to secure your student account.
           </Text>
         </View>
 
-        {/* Security Warning Notice — only true when they were sent here. */}
+        {/* Security Warning Notice — shown when held on forced setup. */}
         {isForced && (
           <View className="bg-indigo-950/20 border border-accent/30 p-4 rounded-xl mb-6">
             <Text className="text-ink-soft text-xs leading-relaxed">
-              🔒 <Text className="font-semibold text-ink-soft">First-Time Setup:</Text> You are currently logged in with a temporary password. You must configure a new, personal password to access your child&apos;s student records.
+              🔒 <Text className="font-semibold text-ink-soft">First-Time Setup:</Text> Your account was set up for you with a temporary school password. You must configure a new, personal password before accessing your student dashboard.
             </Text>
           </View>
         )}
@@ -143,7 +138,7 @@ export default function ParentChangePassScreen() {
               <TextInput
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="Minimum 6 characters"
+                placeholder="Minimum 8 characters"
                 placeholderTextColor={c.inkFaint}
                 secureTextEntry={!showNewPassword}
                 className="w-full bg-surface border border-hairline p-4 pr-16 rounded-xl text-ink text-sm focus:border-accent"
@@ -207,7 +202,7 @@ export default function ParentChangePassScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Signing out is the only way out of a forced setup. A guardian who
+          {/* Signing out is the only way out of a forced setup. A student who
               came here by choice just wants to back out. */}
           <TouchableOpacity
             onPress={async () => {

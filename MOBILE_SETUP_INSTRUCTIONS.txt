@@ -1,0 +1,158 @@
+================================================================================
+          ACTIVKLASS MOBILE - ANDROID STUDIO EMULATOR SETUP GUIDE
+================================================================================
+
+This guide walks you through setting up and running the ActivKlass Mobile app 
+inside an Android Studio Virtual Device (emulator) on your PC.
+
+No Python, database, or backend installation is required! The mobile app 
+connects directly to our live Firebase cloud database.
+
+--------------------------------------------------------------------------------
+PART 1: PREREQUISITES FOR YOUR PC
+--------------------------------------------------------------------------------
+Make sure you have these two installed first:
+1. Node.js (LTS version 20 or 22):
+   Download and install from: https://nodejs.org/
+2. Git:
+   Download and install from: https://git-scm.com/
+
+
+--------------------------------------------------------------------------------
+PART 2: SETTING UP ANDROID STUDIO & THE EMULATOR
+--------------------------------------------------------------------------------
+1. Download and install Android Studio:
+   https://developer.android.com/studio
+   (During installation, keep the default options checked, including 
+   "Android Virtual Device").
+
+2. Open Android Studio:
+   - On the welcome screen, click "More Actions" -> "Virtual Device Manager"
+     (or open any blank project and go to Tools -> Device Manager).
+
+3. Create a Virtual Phone:
+   - Click "Create Device" (or "+").
+   - Select "Phone" -> pick "Pixel 7" or "Pixel 8", then click "Next".
+   - Under "Release Name", pick "VanillaIceCream" (API 35) or "UpsideDownCake" 
+     (API 34). Click the download arrow next to it if not yet downloaded.
+   - Click "Next", then "Finish".
+
+4. Launch the Emulator:
+   - Click the "Play" (▶) button next to your virtual device.
+   - A realistic Android phone window will boot up on your desktop!
+   - Keep this phone window open on your screen while testing.
+
+5. (Important) Enable Environment Variables in Windows:
+   - In your Windows search bar, type "env" and click "Edit environment 
+     variables for your account".
+   - Under "User variables", check if "ANDROID_HOME" exists. If not, click "New":
+       Variable name:  ANDROID_HOME
+       Variable value: %LOCALAPPDATA%\Android\Sdk
+   - Under "User variables", select "Path" -> click "Edit" -> click "New":
+       Add: %LOCALAPPDATA%\Android\Sdk\platform-tools
+   - Click OK to save.
+
+
+--------------------------------------------------------------------------------
+PART 3: CLONE THE PROJECT & CONFIGURE .ENV
+--------------------------------------------------------------------------------
+1. Open PowerShell, Command Prompt, or VS Code Terminal and run:
+
+    git clone <GITHUB_REPO_URL>
+    cd activklass-mobile
+
+2. Create a file named ".env" in the root of the "activklass-mobile" folder
+   (must be named exactly ".env" with the leading dot).
+
+3. Paste this exact configuration into your ".env" file:
+
+# ----------------- COPY BELOW THIS LINE -----------------
+EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyChyILTPdeaKiXLX445A0ZPodQJvZ8eEgQ
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=activklass1.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=activklass1
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=activklass1.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=59267706068
+EXPO_PUBLIC_FIREBASE_APP_ID=1:59267706068:web:f8665d0e50f02396581f41
+EXPO_PUBLIC_API_URL=https://v7l1b77t-5000.asse.devtunnels.ms
+# ----------------- COPY ABOVE THIS LINE -----------------
+
+4. Install the app dependencies:
+
+    npm install
+
+
+--------------------------------------------------------------------------------
+PART 4: LAUNCH THE APP IN YOUR ANDROID STUDIO EMULATOR
+--------------------------------------------------------------------------------
+1. Make sure your Android Studio emulator is running on screen.
+2. In your terminal inside "activklass-mobile", run:
+
+    npx expo start
+
+3. In the terminal, press the "a" key (for Android).
+4. Expo will automatically:
+   - Detect your running Android Studio emulator.
+   - Install the Expo Go companion client onto the emulator.
+   - Bundle and boot ActivKlass on the phone screen!
+
+(Whenever you make edits or want to reload the screen, just press "r" in the 
+terminal or double-tap "r" on the emulator keyboard).
+
+
+--------------------------------------------------------------------------------
+PART 5: DEMO ACCOUNTS TO TEST
+--------------------------------------------------------------------------------
+The password for ALL demo accounts is: pass1234
+(Tip: The Sign In screen has a single unified form just like the web.
+Students enter their Student Login ID, and parents enter their email.
+You can also tap "Show" to reveal passwords.)
+
+1. STUDENT ACCOUNT (Carlo Dela Cruz - At-Risk Science 9 Learner)
+   - Login ID: srnhs-200012
+   - Password: pass1234
+   * What to test on the emulator:
+     [ ] Sign in with Student ID 'srnhs-200012' & password 'pass1234'
+     [ ] Dashboard shows Class Standing Forecast & early warning guidance
+     [ ] Enrolled in Science 9 (Section Rizal)
+     [ ] Remediation tab: Atomic Structure Catch-up guide with teacher notes,
+         markdown study material, practice items, and mastery quiz retake
+     [ ] Class Analytics tab: SVG performance chart vs class average
+     [ ] Parental Access (Profile tab): view connection code CRL7K2
+
+2. PARENT ACCOUNT (Mrs. Mendoza - Carlo's Mother)
+   - Email: demo.parent.mendoza@gmail.com
+   - Password: pass1234
+   * What to test on the emulator:
+     [ ] Sign in with email & test "Show" password toggle
+     [ ] Dashboard displays Carlo's grade average ring & attendance percentage
+     [ ] Class monitoring: view Science 9 grades, attendance logs, and AI insights
+     [ ] Tap on an AI Study Guide / Insight card to expand and view teacher guidance,
+         learning gap focus areas, and recommended materials
+     [ ] "+ Add Child" modal: test entering an invitation code
+     [ ] Child switcher sheet (if multiple children linked)
+     [ ] Profile settings & password update
+
+3. ADULT STUDENT & CONSENT GATE (Data Privacy Act / RA 10173 Demo)
+   - Parent: demo.parent.ocampo@gmail.com (Password: pass1234)
+     -> Log in to see the "Access Gate Restricted" screen.
+   - Student: srnhs-262001 (Password: pass1234)
+     -> Fina Dela Cruz (Adult College Student). Open Profile -> Parental Access
+        to approve Mr. Ocampo's guardian link.
+
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+- "VT-x / AMD-V is disabled in BIOS":
+  If Android Studio fails to start the emulator, restart your PC, enter 
+  BIOS/UEFI, and turn on "Intel Virtualization Technology" or "SVM Mode".
+
+- "No Android connected device found":
+  Make sure the emulator window is fully booted to the home screen before 
+  pressing "a" in the terminal.
+
+- "Network Error" or screens stay blank:
+  Ensure you created the .env file in the root folder and restarted 
+  "npx expo start".
+
+================================================================================

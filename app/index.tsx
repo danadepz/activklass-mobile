@@ -17,7 +17,11 @@ export default function StarterScreen() {
   useEffect(() => {
     if (status === 'signed_in' && profile) {
       if ((profile as any).is_temp_password) {
-        router.replace('/parent/change-pass');
+        if (profile.role === 'student') {
+          router.replace('/student/change-pass');
+        } else {
+          router.replace('/parent/change-pass');
+        }
       } else if (profile.role === 'student') {
         router.replace('/student/dashboard');
       } else if (profile.role === 'parent') {

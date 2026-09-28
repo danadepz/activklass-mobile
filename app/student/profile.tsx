@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
@@ -18,6 +19,7 @@ import { AvatarError, pickAvatarFromGallery } from '../../src/lib/avatar';
    their age to control their own consent gate. What enforces both now is
    firestore.rules, not any screen. */
 export default function StudentProfileScreen() {
+  const router = useRouter();
   /* The photo is the ONE field a student may write on their own profile
      (firestore.rules restricts them to photo_url); everything else is
      registrar data. It comes from the device gallery and is stored inline,
@@ -172,6 +174,18 @@ export default function StudentProfileScreen() {
         <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mb-3">Parental Access</Text>
         <View className="mb-10">
           <ParentalAccessPanel />
+
+        {/* Security */}
+        <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-8 mb-3">
+          Security
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/student/change-pass')}
+          className="w-full bg-surface border border-hairline py-4 px-5 rounded-xl flex-row justify-between items-center"
+        >
+          <Text className="text-ink-soft text-sm font-semibold">Change Password</Text>
+          <Text className="text-ink-faint text-base">›</Text>
+        </TouchableOpacity>
 
         {/* Appearance sits with the other account settings rather than in a
             header: it is a preference you set once, not a control you reach

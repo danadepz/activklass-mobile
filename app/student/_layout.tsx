@@ -76,6 +76,7 @@ export default function StudentLayout() {
       <Tabs.Screen name="quiz-player" options={{ href: null }} />
       <Tabs.Screen name="quiz-feedback" options={{ href: null }} />
       <Tabs.Screen name="class/[classId]" options={{ href: null }} />
+      <Tabs.Screen name="change-pass" options={{ href: null }} />
     </Tabs>
   );
 }
