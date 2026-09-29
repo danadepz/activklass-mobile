@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { useThemeColors } from '../../src/theme';
 
@@ -35,8 +35,8 @@ export default function StudentLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 18 }}>🏠</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} />
           ),
         }}
       />
@@ -44,8 +44,8 @@ export default function StudentLayout() {
         name="classes"
         options={{
           title: 'My Classes',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 18 }}>📚</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'book' : 'book-outline'} size={20} color={color} />
           ),
         }}
       />
@@ -53,8 +53,8 @@ export default function StudentLayout() {
         name="remediation"
         options={{
           title: 'Remediation',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 18 }}>✨</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={20} color={color} />
           ),
         }}
       />
@@ -62,8 +62,8 @@ export default function StudentLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 18 }}>👤</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} />
           ),
         }}
       />

@@ -16,6 +16,8 @@ import {
   markAllRead,
   markRead,
 } from '../../src/lib/notifications';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../../src/theme';
 
 /**
  * Everything a teacher has sent this student.
@@ -25,11 +27,14 @@ import {
  * rather than somewhere you live.
  */
 
-const ICON: Record<string, string> = {
-  score: '📊',
-  attendance_contest: '🗓️',
-  grade_contest: '📝',
-};
+function NotificationIcon({ type, color }: { type?: string | null; color: string }) {
+  let name: keyof typeof Ionicons.glyphMap = 'notifications-outline';
+  if (type === 'score') name = 'stats-chart-outline';
+  else if (type === 'attendance_contest') name = 'calendar-outline';
+  else if (type === 'grade_contest') name = 'create-outline';
+
+  return <Ionicons name={name} size={18} color={color} style={{ marginRight: 12, marginTop: 2 }} />;
+}
 
 function timeAgo(millis: number | null): string {
   if (millis == null) return 'just now';
@@ -43,6 +48,7 @@ function timeAgo(millis: number | null): string {
 }
 
 export default function NotificationsScreen() {
+  const c = useThemeColors();
   const router = useRouter();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +93,7 @@ export default function NotificationsScreen() {
             onPress={() => router.back()}
             className="w-10 h-10 items-center justify-center bg-surface border border-hairline rounded-xl mr-3"
           >
-            <Text className="text-ink text-lg font-bold">←</Text>
+            <Ionicons name="arrow-back" size={20} color={c.ink} />
           </TouchableOpacity>
           <View>
             <Text className="text-accent-text text-xs font-bold uppercase tracking-wider">
@@ -135,7 +141,7 @@ export default function NotificationsScreen() {
 
           {items.length === 0 ? (
             <View className="bg-surface/40 border border-hairline rounded-2xl p-8 items-center my-16">
-              <Text className="text-ink-faint text-3xl mb-3">🔔</Text>
+              <Ionicons name="notifications-off-outline" size={36} color={c.inkFaint} style={{ marginBottom: 12 }} />
               <Text className="text-ink text-base font-bold">Nothing yet</Text>
               <Text className="text-ink-faint text-xs text-center mt-2 leading-relaxed">
                 Your teacher will send you a note here when a score is posted or a request is
@@ -159,7 +165,7 @@ export default function NotificationsScreen() {
                 }`}
               >
                 <View className="flex-row items-start">
-                  <Text className="text-lg mr-3">{ICON[n.type ?? ''] ?? '🔔'}</Text>
+                  <NotificationIcon type={n.type} color={n.read ? c.inkMuted : c.accentText} />
                   <View className="flex-1">
                     <Text
                       className={`text-sm leading-relaxed ${

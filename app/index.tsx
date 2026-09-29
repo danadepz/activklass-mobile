@@ -4,12 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../src/theme';
 
 /** Sampled from assets/images/logo.png so the wordmark matches the mark
  *  exactly, rather than approximating it with the nearest Tailwind amber. */
 const BRAND_GOLD = '#FDC20E';
 
 export default function StarterScreen() {
+  const c = useThemeColors();
   const { status, profile } = useAuth();
   const router = useRouter();
 
@@ -83,7 +86,7 @@ export default function StarterScreen() {
             {/* Value Check Item 1 */}
             <View className="flex-row items-center bg-sunken/40 p-3 rounded-xl border border-hairline/40">
               <View className="w-8 h-8 rounded-full bg-accent/10 items-center justify-center mr-3">
-                <Text className="text-accent-text font-bold">✨</Text>
+                <Ionicons name="sparkles" size={16} color={c.accentText} />
               </View>
               <View className="flex-1">
                 <Text className="text-ink-soft font-semibold text-xs">AI-Driven Remediation</Text>
@@ -94,7 +97,7 @@ export default function StarterScreen() {
             {/* Value Check Item 2 */}
             <View className="flex-row items-center bg-sunken/40 p-3 rounded-xl border border-hairline/40 mt-3">
               <View className="w-8 h-8 rounded-full bg-emerald-500/10 items-center justify-center mr-3">
-                <Text className="text-success font-bold">✓</Text>
+                <Ionicons name="checkmark-circle" size={16} color={c.success} />
               </View>
               <View className="flex-1">
                 <Text className="text-ink-soft font-semibold text-xs">Real-Time Grades & Attendance</Text>
@@ -105,7 +108,7 @@ export default function StarterScreen() {
             {/* Value Check Item 3 */}
             <View className="flex-row items-center bg-sunken/40 p-3 rounded-xl border border-hairline/40 mt-3">
               <View className="w-8 h-8 rounded-full bg-accent/10 items-center justify-center mr-3">
-                <Text className="text-accent-text font-bold">🛡️</Text>
+                <Ionicons name="shield-checkmark" size={16} color={c.accentText} />
               </View>
               <View className="flex-1">
                 <Text className="text-ink-soft font-semibold text-xs">RA 10173 Compliant</Text>

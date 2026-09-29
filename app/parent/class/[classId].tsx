@@ -13,6 +13,8 @@ import {
   loadClassPerformance,
   loadClassStudyGuides,
 } from '../../../src/lib/parentRecords';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../../../src/theme';
 
 /**
  * One class, from the guardian's side.
@@ -36,9 +38,10 @@ type Tab = 'grades' | 'attendance' | 'insights' | 'announcements';
 
 /** Rendered when the student has switched a section off for this guardian. */
 function ScopeNotice({ label }: { label: string }) {
+  const c = useThemeColors();
   return (
     <View className="bg-surface border border-hairline rounded-2xl p-8 items-center mt-3">
-      <Text className="text-ink-faint text-2xl mb-3">🔒</Text>
+      <Ionicons name="lock-closed-outline" size={28} color={c.inkFaint} style={{ marginBottom: 12 }} />
       <Text className="text-ink text-sm font-bold text-center">{label} are hidden</Text>
       <Text className="text-ink-faint text-xs text-center mt-2 leading-relaxed max-w-xs">
         Your child has turned off sharing for this section in their student portal.
@@ -56,6 +59,7 @@ function Empty({ text }: { text: string }) {
 }
 
 export default function ParentClassDetail() {
+  const c = useThemeColors();
   const router = useRouter();
   const params = useLocalSearchParams();
   const classId = String(params.classId ?? '');
@@ -157,8 +161,9 @@ export default function ParentClassDetail() {
       <StatusBar style="auto" />
 
       <View className="px-6 pt-6 pb-4 border-b border-hairline bg-sunken">
-        <TouchableOpacity onPress={() => router.back()} className="self-start mb-4">
-          <Text className="text-ink-muted text-sm font-semibold">← Back to Dashboard</Text>
+        <TouchableOpacity onPress={() => router.back()} className="self-start mb-4 flex-row items-center">
+          <Ionicons name="arrow-back" size={16} color={c.inkMuted} style={{ marginRight: 6 }} />
+          <Text className="text-ink-muted text-sm font-semibold">Back to Dashboard</Text>
         </TouchableOpacity>
 
         <View className="flex-row items-center justify-between">
@@ -439,9 +444,11 @@ export default function ParentClassDetail() {
                           </Text>
                         </View>
                         <View className="w-8 h-8 rounded-full bg-sunken items-center justify-center border border-hairline">
-                          <Text className="text-ink-muted text-xs font-bold">
-                            {isExpanded ? '▲' : '▼'}
-                          </Text>
+                          <Ionicons
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color={c.inkMuted}
+                          />
                         </View>
                       </TouchableOpacity>
 
@@ -450,9 +457,12 @@ export default function ParentClassDetail() {
                           {/* Teacher Guidance / Instructions */}
                           {r.guidance ? (
                             <View className="bg-accent/10 border border-accent/20 p-3.5 rounded-xl mt-3">
-                              <Text className="text-accent-text text-xs font-bold uppercase tracking-wider mb-1">
-                                📝 Teacher Guidance
-                              </Text>
+                              <View className="flex-row items-center mb-1">
+                                <Ionicons name="document-text-outline" size={14} color={c.accentText} style={{ marginRight: 6 }} />
+                                <Text className="text-accent-text text-xs font-bold uppercase tracking-wider">
+                                  Teacher Guidance
+                                </Text>
+                              </View>
                               <Text className="text-ink text-xs leading-relaxed">
                                 {r.guidance}
                               </Text>
@@ -462,9 +472,12 @@ export default function ParentClassDetail() {
                           {/* Identified Weakness / Learning Gap */}
                           {r.weakness_description ? (
                             <View className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl mt-3">
-                              <Text className="text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
-                                🎯 Focus Area
-                              </Text>
+                              <View className="flex-row items-center mb-1">
+                                <Ionicons name="locate-outline" size={14} color="#fbbf24" style={{ marginRight: 6 }} />
+                                <Text className="text-amber-400 text-xs font-bold uppercase tracking-wider">
+                                  Focus Area
+                                </Text>
+                              </View>
                               <Text className="text-ink text-xs leading-relaxed">
                                 {r.weakness_description}
                               </Text>
@@ -474,9 +487,12 @@ export default function ParentClassDetail() {
                           {/* Study Guide Content / Notes */}
                           {r.study_guide_markdown ? (
                             <View className="mt-3">
-                              <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider mb-1">
-                                📖 Study Notes
-                              </Text>
+                              <View className="flex-row items-center mb-1">
+                                <Ionicons name="reader-outline" size={14} color={c.inkSoft} style={{ marginRight: 6 }} />
+                                <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider">
+                                  Study Notes
+                                </Text>
+                              </View>
                               <Text className="text-ink-muted text-xs leading-relaxed">
                                 {r.study_guide_markdown}
                               </Text>
@@ -486,9 +502,12 @@ export default function ParentClassDetail() {
                           {/* Recommended Materials */}
                           {r.recommended_materials && r.recommended_materials.length > 0 ? (
                             <View className="mt-3">
-                              <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider mb-1.5">
-                                📚 Recommended Learning Materials
-                              </Text>
+                              <View className="flex-row items-center mb-1.5">
+                                <Ionicons name="library-outline" size={14} color={c.inkSoft} style={{ marginRight: 6 }} />
+                                <Text className="text-ink-soft text-xs font-bold uppercase tracking-wider">
+                                  Recommended Learning Materials
+                                </Text>
+                              </View>
                               {r.recommended_materials.map((mat, idx) => (
                                 <View
                                   key={idx}
@@ -523,8 +542,9 @@ export default function ParentClassDetail() {
 
                           <View className="mt-4 pt-3 border-t border-hairline/40 flex-row justify-between items-center">
                             <Text className="text-ink-faint text-[10px]">Status: {r.status ?? 'Active'}</Text>
-                            <TouchableOpacity onPress={() => toggleGuide(r.id)}>
-                              <Text className="text-accent-text text-xs font-semibold">Collapse Details ▲</Text>
+                            <TouchableOpacity onPress={() => toggleGuide(r.id)} className="flex-row items-center">
+                              <Text className="text-accent-text text-xs font-semibold mr-1">Collapse Details</Text>
+                              <Ionicons name="chevron-up" size={13} color={c.accentText} />
                             </TouchableOpacity>
                           </View>
                         </View>

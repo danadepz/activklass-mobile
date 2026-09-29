@@ -19,6 +19,7 @@ import {
 } from '../../src/lib/guardianCodes';
 import { useThemeColors } from '../../src/theme';
 import ClassStandingForecast from '../../src/components/ClassStandingForecast';
+import { Ionicons } from '@expo/vector-icons';
 
 // Interface for classes data structure in dashboard
 interface ClassItem {
@@ -194,7 +195,7 @@ export default function StudentDashboard() {
             }
             className="w-11 h-11 items-center justify-center bg-surface border border-hairline rounded-xl"
           >
-            <Text className="text-lg">🔔</Text>
+            <Ionicons name="notifications-outline" size={20} color={c.ink} />
             {unreadCount > 0 && (
               // Count, not a plain dot: "you have something" is less useful
               // than "you have three", and 9+ keeps the badge circular.
@@ -268,9 +269,12 @@ export default function StudentDashboard() {
         {/* Consent Alert Banner (Conditional) */}
         {pendingGuardians.map((link) => (
           <View key={link.link_id} className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-5 mt-5">
-            <Text className="text-warning text-xs font-extrabold uppercase tracking-wider mb-2">
-              🛡️ Consent Request (RA 10173)
-            </Text>
+            <View className="flex-row items-center mb-2">
+              <Ionicons name="shield-checkmark-outline" size={15} color={c.warning} style={{ marginRight: 6 }} />
+              <Text className="text-warning text-xs font-extrabold uppercase tracking-wider">
+                Consent Request (RA 10173)
+              </Text>
+            </View>
             <Text className="text-ink-soft text-xs leading-normal mb-4">
               <Text className="font-semibold text-ink-soft">
                 {link.guardian_name || link.guardian_email || 'A guardian'}
@@ -309,14 +313,17 @@ export default function StudentDashboard() {
             className="bg-indigo-950/20 border border-accent/30 rounded-2xl p-5 mt-5 flex-row items-center justify-between"
           >
             <View className="flex-1 pr-3">
-              <Text className="text-accent-text text-xs font-bold uppercase tracking-wider mb-1">
-                ✨ Adaptive Review Assigned
-              </Text>
+              <View className="flex-row items-center mb-1">
+                <Ionicons name="sparkles-outline" size={14} color={c.accentText} style={{ marginRight: 6 }} />
+                <Text className="text-accent-text text-xs font-bold uppercase tracking-wider">
+                  Adaptive Review Assigned
+                </Text>
+              </View>
               <Text className="text-ink-soft text-xs leading-relaxed">
                 We&apos;ve flagged some learning gaps in <Text className="font-semibold text-ink">{activeRemediations[0].topic}</Text>. Open your Custom Study Guide now.
               </Text>
             </View>
-            <Text className="text-ink text-xl ml-2">→</Text>
+            <Ionicons name="chevron-forward" size={18} color={c.ink} />
           </TouchableOpacity>
         )}
 

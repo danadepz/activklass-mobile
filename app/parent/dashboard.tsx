@@ -28,6 +28,7 @@ import {
   normaliseCode,
 } from '../../src/lib/guardianCodes';
 import { useThemeColors } from '../../src/theme';
+import { Ionicons } from '@expo/vector-icons';
 
 /**
  * Parent dashboard.
@@ -245,7 +246,9 @@ export default function ParentDashboard() {
               <Text className="text-ink text-xl font-extrabold font-sans pr-1">
                 {childName(activeChild)}
               </Text>
-              {cards.length > 1 && <Text className="text-accent-text text-sm">▼</Text>}
+              {cards.length > 1 && (
+                <Ionicons name="chevron-down" size={16} color={c.accentText} style={{ marginLeft: 4 }} />
+              )}
             </TouchableOpacity>
           ) : (
             <Text className="text-ink text-xl font-extrabold font-sans mt-1">No Child Linked</Text>
@@ -284,7 +287,7 @@ export default function ParentDashboard() {
 
         {cards.length === 0 ? (
           <View className="bg-surface/40 border border-hairline rounded-2xl p-8 items-center justify-center my-16">
-            <Text className="text-ink-faint text-3xl mb-4">🛡️</Text>
+            <Ionicons name="shield-checkmark-outline" size={36} color={c.inkFaint} style={{ marginBottom: 16 }} />
             <Text className="text-ink text-base font-bold text-center">No Children Linked</Text>
             <Text className="text-ink-faint text-xs text-center mt-2 leading-relaxed max-w-xs">
               Link your child&apos;s profile to view their grades and attendance. Enter the
@@ -488,7 +491,7 @@ export default function ParentDashboard() {
                             : 'No grade recorded yet'}
                         </Text>
                       </View>
-                      <Text className="text-accent-text text-lg font-bold">→</Text>
+                      <Ionicons name="chevron-forward" size={18} color={c.accentText} />
                     </View>
                   </TouchableOpacity>
                 ))}

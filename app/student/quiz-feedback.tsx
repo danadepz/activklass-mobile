@@ -15,8 +15,11 @@ import {
 import { feedbackVisibility } from '../../src/lib/quizFeedback';
 import { questionsOfAttempt } from '../../src/lib/quizPool';
 import { finishedAttempts } from '../../src/lib/quizAttempts';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../../src/theme';
 
 export default function QuizFeedback() {
+  const c = useThemeColors();
   const router = useRouter();
   const { attemptId } = useLocalSearchParams();
   
@@ -257,9 +260,12 @@ export default function QuizFeedback() {
                       answer in prose, so it must not ride on showCorrectAnswers. */}
                   {visible.showRationale && !isCorrect && !isPendingItem && q.explanation && (
                     <View className="bg-indigo-950/15 border border-accent/25 p-4 rounded-xl mt-4">
-                      <Text className="text-accent-text text-[10px] font-black uppercase tracking-wider mb-2">
-                        ✨ AI Concept Explanation
-                      </Text>
+                      <View className="flex-row items-center mb-2">
+                        <Ionicons name="sparkles-outline" size={13} color={c.accentText} style={{ marginRight: 6 }} />
+                        <Text className="text-accent-text text-[10px] font-black uppercase tracking-wider">
+                          AI Concept Explanation
+                        </Text>
+                      </View>
                       <Text className="text-ink-soft text-xs leading-relaxed font-sans">
                         {q.explanation}
                       </Text>
