@@ -1,0 +1,95 @@
+================================================================================
+     ACTIVKLASS MOBILE - FIX FOR "SOMETHING WENT WRONG" BLUE SCREEN
+================================================================================
+
+If you see a blue screen inside your Android Studio emulator that says:
+    "Something went wrong.
+     Sorry about that. You can go back to Expo home or try to reload the project."
+...while the app works fine on a physical phone with Expo Go, follow the fixes 
+below in order.
+
+--------------------------------------------------------------------------------
+STEP 1: CHECK THE ERROR MESSAGE (RECOMMENDED FIRST)
+--------------------------------------------------------------------------------
+At the very bottom of the blue screen, tap on:
+    "View error log"
+
+- If it says "Could not connect to development server" or "Network response timed out":
+  -> Jump to FIX 1 or FIX 2 below (Connection / Cache issue).
+
+- If it shows a red code error (e.g. "undefined is not an object" or "Firebase"):
+  -> Jump to FIX 3 below (.env file issue).
+
+--------------------------------------------------------------------------------
+FIX 1: RESTART WITH CLEARED CACHE (Solves 80% of issues)
+--------------------------------------------------------------------------------
+Metro bundler often holds onto stale cache.
+
+1. Go to the terminal window where Expo is running.
+2. Stop the server by pressing: Ctrl + C
+3. Restart the server with the clean cache flag:
+       npx expo start -c
+4. Once the QR code appears, press the "a" key to open on the Android emulator.
+
+--------------------------------------------------------------------------------
+FIX 2: FIX EMULATOR NETWORK PORT FORWARDING
+--------------------------------------------------------------------------------
+The Android Studio emulator runs on an internal virtual network and sometimes 
+cannot reach your computer's development port (8081).
+
+OPTION A (Quick Port Forward via ADB):
+1. Open a new PowerShell / Command Prompt window.
+2. Run this command:
+       adb reverse tcp:8081 tcp:8081
+3. Go back to your Expo terminal and press "r" (or double-tap "r" on the emulator) 
+   to reload.
+
+OPTION B (Use Tunnel Mode - bypasses all firewall issues):
+1. Stop your Expo terminal (Ctrl + C).
+2. Start Expo in tunnel mode:
+       npx expo start --tunnel
+3. Press "a" to open on the emulator.
+
+--------------------------------------------------------------------------------
+FIX 3: VERIFY YOUR .ENV FILE EXISTS
+--------------------------------------------------------------------------------
+Because the .env file contains sensitive keys, it is never uploaded to GitHub.
+If you recently pulled updates or cloned the project, your .env file might be missing!
+
+1. Open the "activklass-mobile" folder.
+2. Check if there is a file named ".env" (with the leading dot).
+3. If it is missing, create a new file named ".env" and paste this into it:
+
+EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyChyILTPdeaKiXLX445A0ZPodQJvZ8eEgQ
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=activklass1.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=activklass1
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=activklass1.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=59267706068
+EXPO_PUBLIC_FIREBASE_APP_ID=1:59267706068:web:f8665d0e50f02396581f41
+EXPO_PUBLIC_API_URL=https://v7l1b77t-5000.asse.devtunnels.ms
+
+4. Save the file, restart Expo ("npx expo start -c"), and press "a".
+
+--------------------------------------------------------------------------------
+FIX 4: REINSTALL EXPO GO ON THE EMULATOR
+--------------------------------------------------------------------------------
+If an older version of the Expo Go app was installed on the virtual phone:
+
+1. Inside the Android Studio emulator screen, press the Home button (circle at bottom).
+2. Find the "Expo Go" app icon.
+3. Long-press the "Expo Go" app icon and drag it to "Uninstall" (or tap App Info -> Uninstall).
+4. Go back to your terminal running "npx expo start" and press "a".
+5. Expo will automatically download and install the fresh, matching Expo Go version.
+
+--------------------------------------------------------------------------------
+FIX 5: COLD BOOT THE ANDROID EMULATOR
+--------------------------------------------------------------------------------
+If the emulator's virtual memory or state is frozen:
+
+1. In Android Studio, open the Device Manager (Virtual Device Manager).
+2. Look for your virtual device (e.g. Pixel 7).
+3. Click the three dots menu (⋮) on the right side.
+4. Select "Cold Boot Now" (or "Wipe Data").
+5. Once the phone reboots, run "npx expo start" and press "a".
+
+================================================================================
