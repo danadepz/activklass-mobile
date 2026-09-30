@@ -73,7 +73,7 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=activklass1
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=activklass1.firebasestorage.app
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=59267706068
 EXPO_PUBLIC_FIREBASE_APP_ID=1:59267706068:web:f8665d0e50f02396581f41
-EXPO_PUBLIC_API_URL=https://v7l1b77t-5000.asse.devtunnels.ms
+EXPO_PUBLIC_API_URL=https://activklass-backend-59267706068.asia-southeast1.run.app
 # ----------------- COPY ABOVE THIS LINE -----------------
 
 4. Install the app dependencies:
