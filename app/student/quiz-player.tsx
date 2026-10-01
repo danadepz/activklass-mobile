@@ -118,17 +118,12 @@ export default function QuizPlayer() {
     const fetchQuiz = async () => {
       try {
         const docSnap = await getDoc(doc(db, 'quizzes', quizId as string));
-        if (docSnap.exists()) {
+        if (docSnap && docSnap.exists()) {
           const quizData = docSnap.data();
           setQuiz(quizData);
-          // `??`, not `||`: the teacher's stored value is the only source of
-          // a time limit. `time_limit` is the older field name, still present
-          // on quizzes written before the rename.
           const limitMinutes = quizData.time_limit_minutes ?? quizData.time_limit ?? null;
           setTimeLeft(limitMinutes != null ? Number(limitMinutes) * 60 : null);
 
-          // Same query the web player runs, so the composite index and the
-          // quiz_attempts read rule (own student_id) already cover it.
           const uid = auth.currentUser?.uid;
           if (uid) {
             const priorSnap = await getDocs(
@@ -149,7 +144,7 @@ export default function QuizPlayer() {
           router.back();
         }
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load quiz details:', e);
         Alert.alert('Error', 'Failed to load quiz details.');
       } finally {
         setLoading(false);
@@ -157,7 +152,8 @@ export default function QuizPlayer() {
     };
 
     fetchQuiz();
-  }, [quizId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]);
 
   /* Countdown measured against the deadline the server stamped on the
      attempt, re-derived every tick rather than counted down from a number held
@@ -603,7 +599,9 @@ export default function QuizPlayer() {
                   : 'bg-surface border-hairline'
               }`}
             >
-              <Text className="text-on-accent text-sm font-semibold">{val ? 'True' : 'False'}</Text>
+              <Text className={`text-sm font-semibold ${answers[currentQ.id] === val ? 'text-accent font-bold' : 'text-ink-soft'}`}>
+                {val ? 'True' : 'False'}
+              </Text>
             </TouchableOpacity>
           ))}
 

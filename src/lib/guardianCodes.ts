@@ -374,7 +374,18 @@ export async function lookupGuardianCode(rawCode: string): Promise<GuardianCodeD
     );
   }
 
-  const snap = await getDoc(doc(db, 'guardian_codes', code));
+  let snap;
+  try {
+    snap = await getDoc(doc(db, 'guardian_codes', code));
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new GuardianCodeError(
+        'Unable to check code due to account permissions. Please make sure you are signed in as a parent.',
+        'permission'
+      );
+    }
+    throw err;
+  }
   if (!snap.exists()) {
     throw new GuardianCodeError(
       'No student has that code. Check the six characters with your child — codes can be regenerated, so an old one stops working.',
@@ -455,10 +466,20 @@ export async function createGuardianLink(
     );
   }
 
-  await setDoc(doc(db, 'guardian_links', payload.link_id), {
-    ...payload,
-    linked_at: serverTimestamp(),
-  });
+  try {
+    await setDoc(doc(db, 'guardian_links', payload.link_id), {
+      ...payload,
+      linked_at: serverTimestamp(),
+    });
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new GuardianCodeError(
+        'This connection request could not be processed. The code may have expired or been revoked.',
+        'permission'
+      );
+    }
+    throw err;
+  }
   return payload;
 }
 

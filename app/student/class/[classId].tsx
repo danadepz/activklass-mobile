@@ -11,6 +11,41 @@ import { useThemeColors } from '../../../src/theme';
 import { formatGrade, gradeTone, gradePolicy, itemPasses, passNote } from '../../../src/lib/gradeDisplay';
 import { loadSyllabus } from '../../../src/lib/studentData';
 
+function parseTimestampMillis(ts: any): number | null {
+  if (!ts) return null;
+  if (typeof ts === 'number') return ts;
+  if (ts.seconds) return ts.seconds * 1000;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts === 'string') {
+    const parsed = Date.parse(ts);
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+function timeAgo(millis: number | null): string {
+  if (millis == null) return 'just now';
+  const mins = Math.floor((Date.now() - millis) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return days < 7 ? `${days}d ago` : new Date(millis).toLocaleDateString();
+}
+
+function formatExactDateTime(millis: number | null): string {
+  if (millis == null) return '';
+  const d = new Date(millis);
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function StudentClassDetail() {
   const c = useThemeColors();
   const router = useRouter();
@@ -400,9 +435,9 @@ export default function StudentClassDetail() {
     >
       <View className="flex-1 pr-3">
         <Text className="text-accent-text text-[10px] font-black uppercase">
-          {quiz.status === 'closed' ? '✓ Closed Assessment' : '✏️ Published Assessment'}
+          {quiz.status === 'closed' ? 'Closed Assessment' : 'Published Assessment'}
         </Text>
-        <Text className="text-on-accent text-xs font-bold mt-0.5">{quiz.title}</Text>
+        <Text className="text-ink text-xs font-bold mt-0.5">{quiz.title}</Text>
         <Text className="text-ink-faint text-[9px] mt-1">
           {/* The draw, not the pool: a pooled quiz stores 30 questions and
               hands each student 10, and promising 30 would be a lie the player
@@ -1096,10 +1131,19 @@ export default function StudentClassDetail() {
                   <Text className="text-ink-muted text-xs mt-3 leading-relaxed">{ann.body}</Text>
                   
                   <View className="mt-4 pt-3 border-t border-hairline flex-row justify-between items-center">
-                    <Text className="text-ink-faint text-[10px]">Math Adviser Faculty</Text>
-                    <Text className="text-ink-faint text-[9px]">
-                      {ann.created_at?.seconds ? new Date(ann.created_at.seconds * 1000).toLocaleDateString() : 'Active'}
+                    <Text className="text-ink-faint text-[10px]">
+                      {ann.teacher_name || classInfo?.teacher_name || (classInfo?.subject ? `${classInfo.subject} Faculty` : 'Class Faculty')}
                     </Text>
+                    {(() => {
+                      const ms = parseTimestampMillis(ann.created_at);
+                      if (!ms) return <Text className="text-ink-faint text-[9px]">Active</Text>;
+                      return (
+                        <View className="items-end">
+                          <Text className="text-ink-muted text-[10px] font-semibold">{timeAgo(ms)}</Text>
+                          <Text className="text-ink-faint text-[9px] mt-0.5">{formatExactDateTime(ms)}</Text>
+                        </View>
+                      );
+                    })()}
                   </View>
                 </View>
               ))

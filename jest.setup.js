@@ -70,13 +70,16 @@ jest.mock('firebase/firestore', () => ({
 // useFocusEffect must actually invoke its callback: several screens do their
 // first load there, and a stub that ignores it would report "mounts fine" on a
 // screen whose only render path never runs.
+globalThis.__searchParams = {}
+
 jest.mock('expo-router', () => {
   const React = require('react')
+  const routerStub = {
+    push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(),
+  }
   return {
-    useRouter: () => ({
-      push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(),
-    }),
-    useLocalSearchParams: () => ({}),
+    useRouter: () => routerStub,
+    useLocalSearchParams: () => globalThis.__searchParams ?? {},
     useSegments: () => [],
     usePathname: () => '/',
     useFocusEffect: (cb) => React.useEffect(() => cb(), []),
@@ -138,11 +141,15 @@ jest.mock('expo-status-bar', () => ({ StatusBar: () => null }))
 // babel plugin rewrites JSX and createElement inside a jest.mock factory into
 // a reference to its own runtime, which jest then rejects as an out-of-scope
 // variable -- so these mocks must not construct React Native elements at all.
-jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaProvider: ({ children }) => children,
-  SafeAreaView: ({ children }) => children,
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}))
+jest.mock('react-native-safe-area-context', () => {
+  function SafeAreaProvider(props) { return props ? props.children : null }
+  function SafeAreaView(props) { return props ? props.children : null }
+  return {
+    SafeAreaProvider,
+    SafeAreaView,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  }
+})
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
@@ -164,6 +171,10 @@ console.warn = (...args) => {
 const realError = console.error
 console.error = (...args) => {
   const first = String(args[0] ?? '')
-  if (first.includes('not configured to support act') || first.includes('not wrapped in act')) return
+  if (
+    first.includes('not configured to support act') ||
+    first.includes('not wrapped in act') ||
+    first.includes('overlapping act() calls')
+  ) return
   realError(...args)
 }

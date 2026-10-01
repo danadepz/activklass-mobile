@@ -196,11 +196,14 @@ export default function ParentDashboard() {
           : 'They need to approve the connection from their student portal before records unlock.'
       );
     } catch (err: any) {
-      setAddChildError(
-        err instanceof GuardianCodeError
-          ? err.message
-          : 'That code could not be redeemed. Check your connection and try again.'
-      );
+      console.error('[ParentDashboard] add child failed:', err);
+      if (err instanceof GuardianCodeError) {
+        setAddChildError(err.message);
+      } else if (err?.code === 'unavailable') {
+        setAddChildError('Network connection issue. Check your connection and try again.');
+      } else {
+        setAddChildError('Something went wrong redeeming that code. Try again, and tell us if it keeps happening.');
+      }
     } finally {
       setSubmittingLink(false);
     }
@@ -547,7 +550,7 @@ export default function ParentDashboard() {
                   }`}
                 >
                   <View className="flex-1 pr-3">
-                    <Text className="text-on-accent text-sm font-bold">{childName(card)}</Text>
+                    <Text className="text-ink text-sm font-bold">{childName(card)}</Text>
                     <Text className="text-ink-muted text-xs mt-1">
                       ID: {card.profile?.student_number ?? card.link.student_number ?? '—'} ·{' '}
                       {card.profile?.grade_level ?? card.link.grade_level ?? '—'}

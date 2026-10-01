@@ -47,6 +47,18 @@ function timeAgo(millis: number | null): string {
   return days < 7 ? `${days}d ago` : new Date(millis).toLocaleDateString();
 }
 
+function formatExactDateTime(millis: number | null): string {
+  if (millis == null) return '';
+  const d = new Date(millis);
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function NotificationsScreen() {
   const c = useThemeColors();
   const router = useRouter();
@@ -174,9 +186,16 @@ export default function NotificationsScreen() {
                     >
                       {n.message}
                     </Text>
-                    <Text className="text-ink-faint text-[10px] mt-2">
-                      {timeAgo(n.created_at)}
-                    </Text>
+                    <View className="mt-2">
+                      <Text className="text-ink-muted text-[10px] font-semibold">
+                        {timeAgo(n.created_at)}
+                      </Text>
+                      {n.created_at && (
+                        <Text className="text-ink-faint text-[9px] mt-0.5">
+                          {formatExactDateTime(n.created_at)}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                   {!n.read && <View className="w-2 h-2 rounded-full bg-accent mt-1.5 ml-2" />}
                 </View>
