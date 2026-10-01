@@ -46,3 +46,6 @@ yarn-error.*
 
 # env
 .env
+
+# builds & binaries
+*.apk

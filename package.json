@@ -53,7 +53,8 @@
     "test": "vitest run && jest --runInBand",
     "test:logic": "vitest run",
     "test:screens": "jest --runInBand",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:apk": "cd android && .\\gradlew.bat assembleRelease && cd .. && powershell -Command \"Copy-Item android\\app\\build\\outputs\\apk\\release\\app-release.apk -Destination ActivKlass.apk -Force; Copy-Item android\\app\\build\\outputs\\apk\\release\\app-release.apk -Destination ..\\ActivKlass.apk -Force\""
   },
   "private": true
 }

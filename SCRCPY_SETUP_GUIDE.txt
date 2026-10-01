@@ -1,0 +1,146 @@
+================================================================================
+     ACTIVKLASS MOBILE - SCRCPY SCREEN MIRRORING & APK SETUP GUIDE
+================================================================================
+
+This guide explains how to mirror your real Android phone's screen directly to 
+your laptop during presentations, tests, and capstone defenses using scrcpy.
+
+WHY SCRCPY?
+- 100% Free & Open Source (No watermarks, no ads, no 5-minute time limits).
+- Ultra-low latency (60 FPS, zero lag via USB cable).
+- Does NOT require Android Studio or Expo running on your laptop.
+- Uses almost 0% CPU/RAM on your laptop.
+- You can control the phone using your mouse and keyboard or touch the phone directly!
+
+================================================================================
+PART 1: DOWNLOAD & EXTRACT SCRCPY ON YOUR LAPTOP
+================================================================================
+
+1. Download the scrcpy Windows package:
+   - Go to: https://github.com/Genymobile/scrcpy/releases
+   - Under the latest release (Assets section), download:
+     "scrcpy-win64-vX.X.zip" (e.g., scrcpy-win64-v3.1.zip)
+
+2. Extract the ZIP file:
+   - Right-click the downloaded zip file -> "Extract All...".
+   - Extract it to an easy-to-find folder, for example:
+     C:\scrcpy   or on your Desktop: Desktop\scrcpy
+
+3. Keep this folder open. The file you will run later is "scrcpy.exe".
+
+
+================================================================================
+PART 2: ENABLE USB DEBUGGING ON YOUR ANDROID PHONE
+================================================================================
+
+scrcpy needs "USB Debugging" turned ON to display your phone screen. You only 
+have to do this once!
+
+Step 1: Turn on Developer Options
+- Open your phone's Settings.
+- Scroll down and tap "About Phone" (or "About Device").
+- Find "Build Number":
+  * Xiaomi / Redmi / POCO: Tap "OS Version" or "MIUI version" 7 times.
+  * Samsung: Tap "Software Information" -> tap "Build number" 7 times.
+  * Oppo / Realme / Vivo: Tap "Version" -> tap "Build number" 7 times.
+  * Stock Android / Pixel / Motorola: Tap "Build number" 7 times.
+- You will see a toast notification: "You are now a developer!".
+
+Step 2: Enable USB Debugging
+- Go back to Settings.
+- Search for "Developer options" (usually under System or Additional Settings).
+- Scroll down to the "Debugging" section.
+- Toggle ON "USB debugging".
+  * NOTE FOR XIAOMI / POCO / REDMI USERS:
+    Also enable "USB debugging (Security settings)" if you want to click or 
+    type on the phone from your laptop using your mouse.
+
+
+================================================================================
+PART 3: CONNECT PHONE & START MIRRORING
+================================================================================
+
+1. Connect your phone to your laptop using a USB data cable.
+   (Make sure the cable supports data transfer, not charging only).
+
+2. Look at your phone screen!
+   A popup will appear asking: "Allow USB debugging?".
+   - Check the box: [x] "Always allow from this computer".
+   - Tap "Allow" (or "OK").
+
+3. On your laptop, open your scrcpy folder and double-click:
+   ==> scrcpy.exe
+
+4. SUCCESS!
+   A clean, crisp window displaying your phone's screen will open immediately.
+   Whatever you do on your phone will reflect on the laptop screen in real time.
+
+
+================================================================================
+PART 4: INSTALL THE ACTIVKLASS APK ON YOUR PHONE
+================================================================================
+
+You need the standalone ActivKlass APK installed on your phone (no Expo Go).
+
+Method A (Fastest via scrcpy):
+1. Start scrcpy so your phone screen is visible on your laptop.
+2. Drag and drop the "ActivKlass.apk" file directly into the scrcpy window!
+3. scrcpy will automatically push and install the APK onto your phone.
+
+Method B (Manual phone install):
+1. Copy the "ActivKlass.apk" file to your phone (via USB, Google Drive, or Discord).
+2. On your phone, open your File Manager or Downloads folder.
+3. Tap the APK file and select "Install".
+   (If prompted, allow "Install from unknown sources").
+
+
+================================================================================
+PART 5: PRESENTATION PRO-TIPS FOR DEFENSE DAY
+================================================================================
+
+1. Turn ON "Do Not Disturb" on your phone:
+   - Put your phone on DND / Silent mode before the defense so incoming calls, 
+     Messenger chats, or personal notifications do not pop up on the projector!
+
+2. Side-by-Side Screen Layout:
+   - Position the scrcpy phone window on the right half of your laptop screen.
+   - Position the Web Browser (Teacher/Admin portal) on the left half.
+   - This lets your panel see real-time cross-platform synchronization 
+     (e.g., teacher posts a quiz on web -> notification appears on mobile).
+
+3. Keep Phone Screen Awake:
+   - You can run scrcpy with the command:
+     scrcpy --stay-awake
+   - This prevents your phone from locking its screen while plugged into the laptop.
+
+4. Useful Keyboard Shortcuts in scrcpy:
+   - Right-click mouse:   Back button (Android Back)
+   - Middle-click mouse:  Home button
+   - Ctrl + F:            Toggle Fullscreen
+   - Ctrl + H:            Press Home
+   - Ctrl + S:            Switch App (Recent apps)
+   - Ctrl + Up / Down:    Adjust volume
+
+
+================================================================================
+PART 6: TROUBLESHOOTING
+================================================================================
+
+Issue: Double-clicking scrcpy.exe opens and closes immediately.
+Fix:
+1. Make sure your phone is plugged in with USB debugging turned ON.
+2. Check your phone screen to see if the "Allow USB debugging?" dialog is 
+   waiting for your approval.
+3. Try a different USB cable or a different USB port on your laptop.
+
+Issue: scrcpy says "device unauthorized".
+Fix:
+Unplug the phone, plug it back in, unlock your phone screen, and tap "Allow" 
+on the USB debugging popup.
+
+Issue: Mouse clicks don't work on the mirrored screen (Xiaomi/Redmi/POCO).
+Fix:
+In Developer Options on your phone, enable "USB debugging (Security settings)" 
+(requires logging into your Mi account). Alternatively, you can simply tap the 
+physical phone screen directly during the presentation.
+================================================================================
