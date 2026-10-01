@@ -1,0 +1,136 @@
+================================================================================
+          ACTIVKLASS - TESTER GUIDE: STANDALONE APK & SCREEN MIRRORING
+================================================================================
+
+This guide is for testers and presenters running the ActivKlass Mobile application 
+on a physical Android phone and mirroring it to a laptop.
+
+NO ANDROID STUDIO, EMULATORS, OR EXPO GO REQUIRED!
+The mobile app runs directly on your phone as a standalone APK, connecting to our 
+live Firebase cloud services.
+
+================================================================================
+PART 1: DOWNLOAD THE ACTIVKLASS APK
+================================================================================
+
+Download the latest release APK directly from our GitHub Releases page:
+
+Direct APK Download Link:
+https://github.com/danadepz/activklass-mobile/releases/download/v1.0.0-demo/ActivKlass.apk
+
+Releases Page:
+https://github.com/danadepz/activklass-mobile/releases/tag/v1.0.0-demo
+
+Save "ActivKlass.apk" on your laptop (e.g. in your Downloads or Desktop folder).
+
+
+================================================================================
+PART 2: DOWNLOAD & SETUP SCRCPY ON YOUR LAPTOP
+================================================================================
+
+scrcpy mirrors your real phone screen to your laptop in smooth 60 FPS with 
+almost zero laptop CPU usage and zero lag.
+
+1. Download scrcpy for Windows:
+   - Go to: https://github.com/Genymobile/scrcpy/releases
+   - Under the latest release (Assets section), download:
+     "scrcpy-win64-vX.X.zip" (e.g., scrcpy-win64-v3.1.zip)
+
+2. Extract the ZIP file:
+   - Right-click the downloaded zip file -> "Extract All...".
+   - Extract it to an easy-to-find folder, for example:
+     C:\scrcpy   or   Desktop\scrcpy
+
+3. Keep this folder open. The file you will run later is "scrcpy.exe".
+
+
+================================================================================
+PART 3: ENABLE USB DEBUGGING ON YOUR ANDROID PHONE
+================================================================================
+
+You only need to do this once on your phone!
+
+Step A: Turn on Developer Options
+- Open your phone's Settings.
+- Tap "About Phone" (or "About Device").
+- Find "Build Number" (or "OS/MIUI Version"):
+  * Xiaomi / Redmi / POCO: Tap "OS Version" or "MIUI version" 7 times.
+  * Samsung: Tap "Software Information" -> tap "Build number" 7 times.
+  * Oppo / Realme / Vivo: Tap "Version" -> tap "Build number" 7 times.
+  * Google Pixel / Motorola: Tap "Build number" 7 times.
+- You will see a popup: "You are now a developer!".
+
+Step B: Enable USB Debugging
+- Go back to Settings -> search for "Developer options" (under System or Additional Settings).
+- Scroll down to the "Debugging" section.
+- Toggle ON "USB debugging".
+  * NOTE FOR XIAOMI / POCO / REDMI:
+    Also toggle ON "USB debugging (Security settings)" if you want to click or 
+    type on the phone using your laptop mouse/keyboard.
+
+
+================================================================================
+PART 4: CONNECT PHONE & START MIRRORING
+================================================================================
+
+1. Plug your phone into your laptop using a USB data cable.
+2. Look at your phone screen!
+   A prompt will appear: "Allow USB debugging?".
+   - Check the box: [x] "Always allow from this computer".
+   - Tap "Allow" (or "OK").
+3. On your laptop, open your scrcpy folder and double-click:
+   ==> scrcpy.exe
+4. Your phone's screen will instantly open in a clean, high-resolution window!
+
+
+================================================================================
+PART 5: INSTALL ACTIVKLASS ON YOUR PHONE (DRAG & DROP)
+================================================================================
+
+With scrcpy open and displaying your phone screen:
+1. Locate the downloaded "ActivKlass.apk" on your laptop.
+2. Click and DRAG the "ActivKlass.apk" file directly into the scrcpy window.
+3. scrcpy will automatically install the app onto your phone!
+4. The ActivKlass app icon will appear on your phone's home screen or app drawer.
+5. Tap the app icon to open it.
+
+
+================================================================================
+PART 6: TESTING ACCOUNTS & QUICK CHECKLIST
+================================================================================
+
+All test accounts use password: pass1234
+
+1. Student Login (Unified ID):
+   - Identifier: srnhs-200012   (or any valid student ID)
+   - Password:   pass1234
+   - Pass: Student logs in successfully without asking for an email address.
+
+2. Quiz Player (Fix M1 Check):
+   - Open SCI9 -> published quiz (e.g. Quiz 1 - Atomic Models).
+   - Answer questions 1 & 2 -> click "Next Question".
+   - Pass: Advances to question 3 and submits successfully without crashing.
+
+3. Parent Code Redemption (Fix M2 Check):
+   - Parent Account: demo.parent.ocampo@gmail.com / pass1234 (or create a parent account).
+   - Redeem a student's 6-character code (obtained from student web profile).
+   - Pass: Connects student or provides clear, accurate feedback.
+
+4. UI & Display (Fixes M3 & M4 Check):
+   - Switch phone to Light Mode -> verify all quiz and class cards have dark, readable text.
+   - Check class bulletins and notifications -> verify exact date & time stamps are shown.
+
+
+================================================================================
+PART 7: PRESENTATION PRO-TIPS FOR DEFENSE DAY
+================================================================================
+
+- Turn ON "Do Not Disturb" on your phone before the defense.
+- Position the scrcpy window on the right half of your laptop screen and the 
+  Web app (Chrome) on the left half to show live synchronization to the panel.
+- Useful scrcpy shortcuts:
+  * Right-click:  Back
+  * Middle-click: Home
+  * Ctrl + F:     Fullscreen
+  * Ctrl + H:     Home
+================================================================================
