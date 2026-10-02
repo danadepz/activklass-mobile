@@ -23,6 +23,7 @@
  * wrong: a screen that throws on mount and never shows the student a question.
  */
 import React from 'react'
+import { Alert } from 'react-native'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native'
 import { getDoc, getDocs } from 'firebase/firestore'
 import { renderScreen } from '../../renderScreen'
@@ -158,5 +159,41 @@ describe('quiz player', () => {
     expect(screen.queryByText('Next Question')).toBeNull()
     const submitBtn = screen.getByText('Submit Quiz')
     expect(submitBtn).toBeTruthy()
+
+    // Answer Q3
+    await act(async () => {
+      fireEvent.press(screen.getByText('Atomic Model'))
+    })
+
+    const alertSpy = jest.spyOn(Alert, 'alert')
+
+    // Press Submit Quiz button
+    await act(async () => {
+      fireEvent.press(submitBtn)
+    })
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Submit Assessment',
+      expect.any(String),
+      expect.any(Array),
+    )
+
+    // Trigger the Submit confirmation
+    const alertButtons = alertSpy.mock.calls[0][2]
+    const confirmSubmit = alertButtons?.find((b: any) => b.text === 'Submit')
+    expect(confirmSubmit).toBeTruthy()
+
+    await act(async () => {
+      confirmSubmit?.onPress?.()
+    })
+
+    // Verify successful submission and navigation to feedback screen
+    const router = require('expo-router').useRouter()
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith({
+        pathname: '/student/quiz-feedback',
+        params: { attemptId: 'att-1' },
+      })
+    })
   })
 })

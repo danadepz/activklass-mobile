@@ -691,6 +691,7 @@ export default function QuizPlayer() {
           </View>
         ) : (
           <TouchableOpacity
+            key="prev-question-btn"
             onPress={() => setCurrentIdx(prev => Math.max(0, prev - 1))}
             disabled={currentIdx === 0}
             className={`px-4 py-3 rounded-xl border border-hairline ${currentIdx === 0 ? 'opacity-40' : ''}`}
@@ -701,6 +702,7 @@ export default function QuizPlayer() {
 
         {currentIdx < questions.length - 1 ? (
           <TouchableOpacity
+            key="next-question-btn"
             onPress={() => setCurrentIdx(prev => prev + 1)}
             className="px-6 py-3 bg-sunken border border-hairline rounded-xl"
           >
@@ -708,8 +710,16 @@ export default function QuizPlayer() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
+            key="submit-quiz-btn"
             onPress={handleSubmitPress}
-            className="px-6 py-3 bg-accent rounded-xl shadow-md shadow-indigo-600/20"
+            className="px-6 py-3 bg-accent rounded-xl"
+            style={{
+              elevation: 3,
+              shadowColor: '#4f46e5',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 4,
+            }}
           >
             <Text className="text-on-accent text-xs font-bold">Submit Quiz</Text>
           </TouchableOpacity>
