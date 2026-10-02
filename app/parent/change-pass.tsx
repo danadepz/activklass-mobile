@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { updatePassword, signOut } from 'firebase/auth';
+import { updatePassword, signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { useThemeColors } from '../../src/theme';
-import { passwordError } from '../../src/lib/validation';
+import { passwordError, PASSWORD_RULE } from '../../src/lib/validation';
 
 export default function ParentChangePassScreen() {
   const c = useThemeColors();
@@ -22,16 +22,24 @@ export default function ParentChangePassScreen() {
   // and only the first should land on the dashboard afterwards.
   const isForced = Boolean(profile?.is_temp_password);
 
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleUpdatePassword = async () => {
+    // 1. In voluntary flow, verify current password is provided before touching anything
+    if (!isForced && !currentPassword.trim()) {
+      setError('Please enter your current password.');
+      return;
+    }
+
     if (!newPassword.trim() || !confirmPassword.trim()) {
-      setError('Please fill in both password fields.');
+      setError(isForced ? 'Please fill in both password fields.' : 'Please fill in both new password fields.');
       return;
     }
 
@@ -57,10 +65,22 @@ export default function ParentChangePassScreen() {
         return;
       }
 
-      // 1. Update password in Firebase Auth
+      // 2. Reauthenticate when changing password voluntarily
+      if (!isForced) {
+        const email = currentUser.email || profile?.email;
+        if (!email) {
+          setError('No user email found. Please sign in again.');
+          setLoading(false);
+          return;
+        }
+        const credential = EmailAuthProvider.credential(email, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+
+      // 3. Update password in Firebase Auth
       await updatePassword(currentUser, newPassword);
 
-      // 2. Remove is_temp_password flag from Firestore user profile, and stamp
+      // 4. Remove is_temp_password flag from Firestore user profile, and stamp
       //    when it happened. Best-effort after the fact, matching web.
       try {
         await updateDoc(doc(db, 'users', currentUser.uid), {
@@ -71,10 +91,12 @@ export default function ParentChangePassScreen() {
         console.warn('[ParentChangePass] password state not recorded:', flagErr);
       }
 
-      // 3. Refresh context profile so that status updates
-      await refreshProfile();
+      // 5. Refresh context profile so that status updates
+      if (typeof refreshProfile === 'function') {
+        await refreshProfile();
+      }
 
-      // 4. Forced first-time setup ends at the dashboard; a voluntary change
+      // 6. Forced first-time setup ends at the dashboard; a voluntary change
       //    returns to wherever they came from.
       if (isForced) {
         router.replace('/parent/dashboard');
@@ -84,10 +106,27 @@ export default function ParentChangePassScreen() {
 
     } catch (err: any) {
       console.error('[ParentChangePass] Error updating password:', err);
-      if (err.code === 'auth/requires-recent-login') {
+      const code = err?.code || '';
+      if (
+        code === 'auth/wrong-password' ||
+        code === 'auth/invalid-credential' ||
+        code === 'auth/user-mismatch'
+      ) {
+        setError('Current password is incorrect.');
+      } else if (code === 'auth/requires-recent-login') {
         setError('Security threshold reached. Please sign out and sign back in to change your password.');
+      } else if (code === 'auth/too-many-requests') {
+        setError('Too many attempts. Please wait a few minutes and try again.');
+      } else if (code === 'auth/weak-password') {
+        setError('Password is too weak. Please choose a stronger password.');
+      } else if (
+        typeof err?.message === 'string' &&
+        !err.message.includes('auth/') &&
+        !err.message.startsWith('Firebase:')
+      ) {
+        setError(err.message);
       } else {
-        setError(err.message || 'Password update failed. Please try again.');
+        setError('Password update failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -107,10 +146,12 @@ export default function ParentChangePassScreen() {
         {/* Header */}
         <View className="mb-6 mt-6">
           <Text className="text-ink text-3xl font-extrabold font-sans">
-            Set New Password
+            {isForced ? 'Set New Password' : 'Change Password'}
           </Text>
           <Text className="text-ink-muted text-sm mt-2 font-sans">
-            Update your password to secure your account.
+            {isForced
+              ? 'Update your password to secure your account.'
+              : 'Enter your current password to confirm your identity.'}
           </Text>
         </View>
 
@@ -134,16 +175,47 @@ export default function ParentChangePassScreen() {
             </View>
           )}
 
+          {/* Current Password - only for voluntary changes */}
+          {!isForced && (
+            <View>
+              <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
+                Current Password
+              </Text>
+              <View className="relative">
+                <TextInput
+                  testID="input-current-password"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  placeholder="Enter your current password"
+                  placeholderTextColor={c.inkFaint}
+                  secureTextEntry={!showCurrentPassword}
+                  className="w-full bg-surface border border-hairline p-4 pr-16 rounded-xl text-ink text-sm focus:border-accent"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowCurrentPassword((s) => !s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                  className="absolute right-4 top-4"
+                >
+                  <Text className="text-ink-muted text-xs font-semibold">
+                    {showCurrentPassword ? 'Hide' : 'Show'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* New Password */}
-          <View>
+          <View className={!isForced ? 'mt-4' : ''}>
             <Text className="text-ink-soft text-xs font-bold mb-2 uppercase tracking-wider">
               New Password
             </Text>
             <View className="relative">
               <TextInput
+                testID="input-new-password"
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="Minimum 6 characters"
+                placeholder="8+ chars with uppercase, lowercase, number & symbol"
                 placeholderTextColor={c.inkFaint}
                 secureTextEntry={!showNewPassword}
                 className="w-full bg-surface border border-hairline p-4 pr-16 rounded-xl text-ink text-sm focus:border-accent"
@@ -159,6 +231,9 @@ export default function ParentChangePassScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            <Text className="text-ink-muted text-xs mt-1.5 font-sans">
+              {PASSWORD_RULE}
+            </Text>
           </View>
 
           {/* Confirm Password */}
@@ -168,6 +243,7 @@ export default function ParentChangePassScreen() {
             </Text>
             <View className="relative">
               <TextInput
+                testID="input-confirm-password"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Re-enter new password"

@@ -108,6 +108,7 @@ globalThis.__authState = {
   },
   loading: false,
   logout: () => {},
+  refreshProfile: jest.fn(async () => {}),
 }
 
 /** Sign the next render in as someone else. Call before renderScreen(). */
@@ -117,6 +118,7 @@ globalThis.signedInAs = (profile) => {
     profile,
     loading: false,
     logout: () => {},
+    refreshProfile: jest.fn(async () => {}),
   }
 }
 
