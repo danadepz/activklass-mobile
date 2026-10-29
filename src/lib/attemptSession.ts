@@ -15,6 +15,10 @@
  * firestore.rules was widened to match, narrowly: a student may update their
  * own attempt only while it is still `in_progress`, and may not change
  * `student_id`, `quiz_id` or `started_at`.
+ *
+ * T-208 (audit F-06): that same rule now also requires the attempt to STAY
+ * `in_progress` through any client-written update, so finishing one is no
+ * longer a direct write -- see finishAttempt() below.
  */
 import {
   addDoc,
@@ -27,6 +31,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { api } from './api';
 import { FOCUS_EVENT_CAP, expiryFrom, type FocusEvent } from './quizAttempts';
 
 /**
@@ -119,24 +124,24 @@ export function recordFocusEvent(attemptId: string, event: FocusEvent, storedCou
  * `expired` records that the clock ran out rather than the student pressing
  * Submit. Both produce a real, graded attempt; a teacher looking at a low score
  * should be able to see which happened.
+ *
+ * T-208 (audit F-06): this used to grade the attempt client-side
+ * (src/lib/quizGrading's gradeQuiz) and write the result straight to
+ * Firestore -- nothing stopped a student submitting any score they liked.
+ * It now POSTs the raw answers to the server, which re-reads the quiz's
+ * own answer key through the Admin SDK and grades authoritatively
+ * (app/services/quiz_attempt_grading.py in activklass-backend);
+ * firestore.rules refuses a direct client write that tries to finish the
+ * attempt itself, so this endpoint is now the only path. Ported from
+ * activklass-web's useAttemptSession.js -- same endpoint, same body shape.
  */
 export function finishAttempt(
   attemptId: string,
-  { result, answers, expired = false }: { result: any; answers: Record<string, any>; expired?: boolean },
+  { answers, expired = false }: { answers: Record<string, any>; expired?: boolean },
 ) {
-  return updateDoc(doc(db, 'quiz_attempts', attemptId), {
-    answers,
-    per_question: result.per_question,
-    // Both names are required: `score` is the documented field, `total_score`
-    // is what every teacher-side view actually reads.
-    total_score: result.total_score,
-    score: result.total_score,
-    total_possible: result.total_possible,
-    score_ratio: result.score_ratio,
-    has_essays_pending: result.has_essays,
-    status: result.has_essays ? 'submitted' : 'graded',
-    expired_at_submit: expired,
-    submitted_at: serverTimestamp(),
+  return api(`/quiz_attempts/${attemptId}/submit`, {
+    method: 'POST',
+    body: { answers, expired },
   });
 }
 

@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
-import { gradeQuiz, isAnswered, matchingChoices } from '../../src/lib/quizGrading';
+import { isAnswered, matchingChoices } from '../../src/lib/quizGrading';
 import { questionsForAttempt, questionsForStudent } from '../../src/lib/quizPool';
 import {
   attemptsAllowedFor,
@@ -385,17 +385,10 @@ export default function QuizPlayer() {
 
     setLoading(true);
 
-    // src/lib/quizGrading is the shared grader, deliberately the only one: this
-    // file used to grade matching all-or-nothing while the web gave
-    // proportional credit, so the same answers earned a different mark
-    // depending on the device.
-    // The drawn paper, not the whole pool: grading `quiz` directly would mark
-    // a pooled student against questions they never saw.
     // answersRef, not `answers`: the expired-timer path reaches here through a
     // closure frozen at the render where the attempt was created. The ref is
     // always current, and for the manual Submit button the two are identical.
     const submitted = answersRef.current;
-    const graded = gradeQuiz({ ...quiz, questions }, submitted);
 
     try {
       /* Closes the attempt that already exists rather than creating one. The
@@ -403,11 +396,10 @@ export default function QuizPlayer() {
          the deadline to the server clock instead of to whenever this screen
          opened, and what gives reopens and away-events somewhere to live.
 
-         `finishAttempt` writes both `score` and `total_score`: the first is
-         the documented field, the second is what every teacher-side view
-         actually reads (scaffold mastery, quiz results, class history). */
+         T-208 (audit F-06): grading moved server-side -- the server already
+         knows the drawn paper from the attempt's own question_ids, so there
+         is no client-side gradeQuiz() call here to go stale against it. */
       await finishAttempt(attempt.id, {
-        result: graded,
         answers: submitted,
         expired: hasExpired(attempt),
       });

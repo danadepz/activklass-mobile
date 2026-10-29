@@ -66,6 +66,25 @@ jest.mock('firebase/firestore', () => ({
   Timestamp: { now: () => ({ toMillis: () => 0 }), fromMillis: (m) => ({ toMillis: () => m }) },
 }))
 
+// Flask API client (src/lib/api.ts) stubbed the same way as Firestore above:
+// no network, resolves empty. T-208 added a real caller of it on the
+// student side (quiz submission) -- previously only the parent portal used
+// it, so no screen test exercised this module until now.
+jest.mock('./src/lib/api', () => ({
+  api: jest.fn(async () => ({})),
+  ApiError: class ApiError extends Error {
+    constructor(message, code, status, scope) {
+      super(message)
+      this.code = code
+      this.status = status
+      this.scope = scope
+    }
+  },
+  isAwaitingApproval: jest.fn(() => false),
+  isScopeDenied: jest.fn(() => false),
+  errorMessage: jest.fn((err, fallback) => err?.message ?? fallback),
+}))
+
 // --- expo-router ----------------------------------------------------------
 // useFocusEffect must actually invoke its callback: several screens do their
 // first load there, and a stub that ignores it would report "mounts fine" on a
