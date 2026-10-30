@@ -99,11 +99,13 @@ With scrcpy open and displaying your phone screen:
 PART 6: TESTING ACCOUNTS & QUICK CHECKLIST
 ================================================================================
 
-All test accounts use password: pass1234
+Test account passwords are rotated periodically and are not published in
+this repo. See the pinned credentials message in the ActivKlass Discord for
+the current password.
 
 1. Student Login (Unified ID):
    - Identifier: srnhs-200012   (or any valid student ID)
-   - Password:   pass1234
+   - Password:   see pinned Discord credentials message
    - Pass: Student logs in successfully without asking for an email address.
 
 2. Quiz Player (Fix M1 Check):
@@ -112,7 +114,7 @@ All test accounts use password: pass1234
    - Pass: Advances to question 3 and submits successfully without crashing.
 
 3. Parent Code Redemption (Fix M2 Check):
-   - Parent Account: demo.parent.ocampo@gmail.com / pass1234 (or create a parent account).
+   - Parent Account: demo.parent.ocampo@gmail.com / see pinned Discord credentials message (or create a parent account).
    - Redeem a student's 6-character code (obtained from student web profile).
    - Pass: Connects student or provides clear, accurate feedback.
 

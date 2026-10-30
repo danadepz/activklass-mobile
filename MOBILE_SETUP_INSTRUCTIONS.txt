@@ -102,16 +102,18 @@ terminal or double-tap "r" on the emulator keyboard).
 --------------------------------------------------------------------------------
 PART 5: DEMO ACCOUNTS TO TEST
 --------------------------------------------------------------------------------
-The password for ALL demo accounts is: pass1234
+Demo account passwords are rotated periodically and are not published in
+this repo. See the pinned credentials message in the ActivKlass Discord for
+the current password, or ask the project owner.
 (Tip: The Sign In screen has a single unified form just like the web.
 Students enter their Student Login ID, and parents enter their email.
 You can also tap "Show" to reveal passwords.)
 
 1. STUDENT ACCOUNT (Carlo Dela Cruz - At-Risk Science 9 Learner)
    - Login ID: srnhs-200012
-   - Password: pass1234
+   - Password: see pinned Discord credentials message (not published here)
    * What to test on the emulator:
-     [ ] Sign in with Student ID 'srnhs-200012' & password 'pass1234'
+     [ ] Sign in with Student ID 'srnhs-200012' using the current demo password
      [ ] Dashboard shows Class Standing Forecast & early warning guidance
      [ ] Enrolled in Science 9 (Section Rizal)
      [ ] Remediation tab: Atomic Structure Catch-up guide with teacher notes,
@@ -121,7 +123,7 @@ You can also tap "Show" to reveal passwords.)
 
 2. PARENT ACCOUNT (Mrs. Mendoza - Carlo's Mother)
    - Email: demo.parent.mendoza@gmail.com
-   - Password: pass1234
+   - Password: see pinned Discord credentials message (not published here)
    * What to test on the emulator:
      [ ] Sign in with email & test "Show" password toggle
      [ ] Dashboard displays Carlo's grade average ring & attendance percentage
@@ -133,9 +135,9 @@ You can also tap "Show" to reveal passwords.)
      [ ] Profile settings & password update
 
 3. ADULT STUDENT & CONSENT GATE (Data Privacy Act / RA 10173 Demo)
-   - Parent: demo.parent.ocampo@gmail.com (Password: pass1234)
+   - Parent: demo.parent.ocampo@gmail.com (password: see pinned Discord message)
      -> Log in to see the "Access Gate Restricted" screen.
-   - Student: srnhs-262001 (Password: pass1234)
+   - Student: srnhs-262001 (password: see pinned Discord message)
      -> Fina Dela Cruz (Adult College Student). Open Profile -> Parental Access
         to approve Mr. Ocampo's guardian link.
 
