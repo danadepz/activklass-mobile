@@ -15,6 +15,33 @@ export interface GuardianScopes {
   can_view_analytics: boolean;
 }
 
+/**
+ * The lecture and laboratory halves behind one period's grade, for a class
+ * graded as "Lecture with Laboratory". Null for every other class, and for
+ * every entry written before laboratory grading existed.
+ *
+ * Read from the entry the teacher's client saved -- never recomputed here.
+ * That is the whole point: the parent app once recomputed grades of its own
+ * and showed a passing learner as failing (see parentRecords.ts).
+ */
+export type PeriodTracks = {
+  lecture: number | null;
+  lab: number | null;
+  lecture_weight_percent: number;
+  lab_weight_percent: number;
+} | null;
+
+export function readTracks(raw: any): PeriodTracks {
+  if (!raw || typeof raw !== 'object') return null;
+  const n = (v: any) => (Number.isFinite(Number(v)) && v != null ? Number(v) : null);
+  return {
+    lecture: n(raw.lecture),
+    lab: n(raw.lab),
+    lecture_weight_percent: n(raw.lecture_weight_percent) ?? 0,
+    lab_weight_percent: n(raw.lab_weight_percent) ?? 0,
+  };
+}
+
 export type LinkStatus = 'pending' | 'approved' | 'revoked';
 
 export interface LinkedStudent {
@@ -80,7 +107,7 @@ export interface PerformancePayload {
   section: string | null;
   grading_mode: string;
   final_grade: number | null;
-  periods: { id: string; name: string | null; grade: number | null }[];
+  periods: { id: string; name: string | null; grade: number | null; tracks?: PeriodTracks }[];
   assessments: AssessmentRow[];
 }
 

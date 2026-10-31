@@ -1,5 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { readTracks } from './parent';
 import type { AttendanceLog, AttendancePayload, PerformancePayload } from './parent';
 
 /**
@@ -53,7 +54,15 @@ export async function loadClassPerformance(
     // 75 is the pass mark. Defaulting to deped_k12 matches the server.
     grading_mode: e.mode ?? 'deped_k12',
     final_grade: e.final_grade ?? null,
-    periods: Array.isArray(e.periods) ? e.periods : [],
+    periods: Array.isArray(e.periods)
+      ? e.periods.map((p: any) => ({
+          id: String(p?.id ?? ''),
+          name: p?.name ?? null,
+          grade: p?.grade ?? null,
+          // Lecture / laboratory halves, null on a lecture-only class.
+          tracks: readTracks(p?.tracks),
+        }))
+      : [],
     assessments: Array.isArray(e.assessments) ? e.assessments : [],
   };
 }

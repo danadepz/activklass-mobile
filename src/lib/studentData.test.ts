@@ -90,6 +90,40 @@ describe('loadStudentEntry', () => {
     expect(e?.passing_percent).toBeNull()
     expect(e?.assessments).toEqual([])
   })
+
+  it('parses tracks on student entry periods for Lecture with Laboratory', async () => {
+    getDoc.mockResolvedValue(snap({
+      final_grade: 83,
+      mode: 'ched_percentage',
+      periods: [{
+        id: 'mid',
+        name: 'Midterm',
+        grade: 85,
+        tracks: {
+          lecture: 82.4,
+          lab: 89.4,
+          lecture_weight_percent: 66.67,
+          lab_weight_percent: 33.33,
+        },
+      }],
+    }))
+    const e = await loadStudentEntry('c1', 's1')
+    expect(e?.periods[0].tracks).toEqual({
+      lecture: 82.4,
+      lab: 89.4,
+      lecture_weight_percent: 66.67,
+      lab_weight_percent: 33.33,
+    })
+  })
+
+  it('leaves tracks null when absent on legacy student entry', async () => {
+    getDoc.mockResolvedValue(snap({
+      final_grade: 90,
+      periods: [{ id: 'q1', name: 'Quarter 1', grade: 90 }],
+    }))
+    const e = await loadStudentEntry('c1', 's1')
+    expect(e?.periods[0].tracks).toBeNull()
+  })
 })
 
 describe('loadStudentAttendance', () => {

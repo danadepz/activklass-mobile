@@ -20,6 +20,7 @@
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { Syllabus, Module } from './scaffolding';
+import { readTracks, type PeriodTracks } from './parent';
 export type { Syllabus };
 
 export interface EntryAssessment {
@@ -45,7 +46,7 @@ export interface EntryComponent {
 export interface StudentEntry {
   class_id: string;
   final_grade: number | null;
-  periods: { id: string; name: string | null; grade: number | null }[];
+  periods: { id: string; name: string | null; grade: number | null; tracks: PeriodTracks }[];
   /** 'deped_k12' | 'ched_percentage' | 'ched_point' — stamped by the record. */
   mode: string | null;
   /** The teacher's pass mark and scale direction (T-45). Read, never assumed. */
@@ -98,6 +99,7 @@ export async function loadStudentEntry(
             id: String(p.id ?? ''),
             name: p.name ?? null,
             grade: toNumber(p.grade),
+            tracks: readTracks(p.tracks),
           }))
         : [],
       mode: typeof d.mode === 'string' ? d.mode : null,

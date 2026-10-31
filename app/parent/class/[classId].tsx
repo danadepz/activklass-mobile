@@ -262,10 +262,21 @@ export default function ParentClassDetail() {
                   {performance!.periods.map((p) => (
                     <View
                       key={p.id}
-                      className="bg-surface border border-hairline px-4 py-3 rounded-xl mb-2 flex-row justify-between items-center"
+                      className="bg-surface border border-hairline px-4 py-3 rounded-xl mb-2"
                     >
-                      <Text className="text-ink-soft text-xs font-semibold">{p.name ?? '—'}</Text>
-                      <Text className="text-ink text-sm font-bold">{p.grade ?? '—'}</Text>
+                      <View className="flex-row justify-between items-center">
+                        <Text className="text-ink-soft text-xs font-semibold">{p.name ?? '—'}</Text>
+                        <Text className="text-ink text-sm font-bold">{p.grade ?? '—'}</Text>
+                      </View>
+                      {/* The two halves behind that grade, for a class graded
+                          as Lecture with Laboratory. Shown, never recomputed. */}
+                      {p.tracks && (
+                        <Text className="text-ink-muted text-[11px] mt-1">
+                          Lecture {p.tracks.lecture ?? '—'}
+                          {'  ·  '}
+                          Laboratory {p.tracks.lab ?? 'not yet graded'}
+                        </Text>
+                      )}
                     </View>
                   ))}
                 </View>

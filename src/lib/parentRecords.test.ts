@@ -93,6 +93,60 @@ describe('loadClassPerformance', () => {
     expect(p?.periods).toEqual([])
     expect(p?.assessments).toEqual([])
   })
+
+  it('parses tracks on periods for Lecture with Laboratory classes', async () => {
+    getDoc.mockResolvedValue(entry({
+      periods: [{
+        id: 'mid',
+        name: 'Midterm',
+        grade: 85,
+        tracks: {
+          lecture: 82.4,
+          lab: 89.4,
+          lecture_weight_percent: 66.67,
+          lab_weight_percent: 33.33,
+        },
+      }],
+    }))
+    const p = await loadClassPerformance('student-1', 'c1')
+    expect(p?.periods[0].tracks).toEqual({
+      lecture: 82.4,
+      lab: 89.4,
+      lecture_weight_percent: 66.67,
+      lab_weight_percent: 33.33,
+    })
+  })
+
+  it('handles null lab track without fabricating zero', async () => {
+    getDoc.mockResolvedValue(entry({
+      periods: [{
+        id: 'mid',
+        name: 'Midterm',
+        grade: 82,
+        tracks: {
+          lecture: 82.4,
+          lab: null,
+          lecture_weight_percent: 66.67,
+          lab_weight_percent: 33.33,
+        },
+      }],
+    }))
+    const p = await loadClassPerformance('student-1', 'c1')
+    expect(p?.periods[0].tracks?.lecture).toBe(82.4)
+    expect(p?.periods[0].tracks?.lab).toBeNull()
+  })
+
+  it('leaves tracks null for lecture-only classes', async () => {
+    getDoc.mockResolvedValue(entry({
+      periods: [{
+        id: 'q1',
+        name: 'Quarter 1',
+        grade: 90,
+      }],
+    }))
+    const p = await loadClassPerformance('student-1', 'c1')
+    expect(p?.periods[0].tracks).toBeNull()
+  })
 })
 
 const summaries = (rows: any[]) => ({ docs: rows.map((r) => ({ data: () => r })) })
