@@ -21,7 +21,16 @@
 // and `db` from here, so this is the narrowest place that works and it does
 // not require knowing which SDK functions each screen happens to call.
 jest.mock('./src/config/firebase', () => ({
-  auth: { currentUser: { uid: 'test-student', email: 'student@test.dev' } },
+  auth: {
+    currentUser: {
+      uid: 'test-student',
+      email: 'student@test.dev',
+      // The change-password screens force an ID-token refresh after the
+      // server lifts `must_change_password`, so the fake user has to model
+      // it -- without this the screens throw where the real object would not.
+      getIdToken: jest.fn(async () => 'test-id-token'),
+    },
+  },
   db: {},
 }))
 

@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { updatePassword, signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../../src/config/firebase';
+import { signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { useThemeColors } from '../../src/theme';
 import { passwordError, PASSWORD_RULE } from '../../src/lib/validation';
+import { api } from '../../src/lib/api';
 
 export default function ParentChangePassScreen() {
   const c = useThemeColors();
@@ -77,19 +77,18 @@ export default function ParentChangePassScreen() {
         await reauthenticateWithCredential(currentUser, credential);
       }
 
-      // 3. Update password in Firebase Auth
-      await updatePassword(currentUser, newPassword);
+      // 3. The server performs the change, and only then lifts the
+      //    restriction -- see app/student/change-pass.tsx for why this moved
+      //    off the client. `must_change_password` is a custom claim the
+      //    backend enforces on every request and no client can write.
+      await api('/api/auth/initial-password', {
+        method: 'POST',
+        body: { new_password: newPassword, confirm_password: confirmPassword },
+      });
 
-      // 4. Remove is_temp_password flag from Firestore user profile, and stamp
-      //    when it happened. Best-effort after the fact, matching web.
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          is_temp_password: false,
-          password_changed_at: serverTimestamp(),
-        });
-      } catch (flagErr) {
-        console.warn('[ParentChangePass] password state not recorded:', flagErr);
-      }
+      // 4. The lifted claim lives in the ID token; refresh or the next request
+      //    still presents a restricted token.
+      await currentUser.getIdToken(true);
 
       // 5. Refresh context profile so that status updates
       if (typeof refreshProfile === 'function') {

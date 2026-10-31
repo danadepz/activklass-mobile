@@ -6,7 +6,8 @@ import React from 'react';
 import { screen, waitFor, fireEvent, act } from '@testing-library/react-native';
 import { renderScreen } from '../../renderScreen';
 import ParentChangePassScreen from '../../../../app/parent/change-pass';
-import { reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { reauthenticateWithCredential } from 'firebase/auth';
+import { api } from '../../../../src/lib/api';
 import { PASSWORD_RULE } from '../../../../src/lib/validation';
 
 describe('guardian change password screen', () => {
@@ -70,10 +71,10 @@ describe('guardian change password screen', () => {
         expect(screen.getByText('Please enter your current password.')).toBeTruthy();
       });
       expect(reauthenticateWithCredential).not.toHaveBeenCalled();
-      expect(updatePassword).not.toHaveBeenCalled();
+      expect(api).not.toHaveBeenCalled();
     });
 
-    it('rejects wrong current password and does not call updatePassword', async () => {
+    it('rejects wrong current password and never reaches the server', async () => {
       (reauthenticateWithCredential as jest.Mock).mockRejectedValueOnce({
         code: 'auth/wrong-password',
         message: 'Firebase: Error (auth/wrong-password).',
@@ -110,16 +111,17 @@ describe('guardian change password screen', () => {
         expect(screen.getByText('Current password is incorrect.')).toBeTruthy();
       });
       expect(reauthenticateWithCredential).toHaveBeenCalled();
-      expect(updatePassword).not.toHaveBeenCalled();
+      expect(api).not.toHaveBeenCalled();
     });
 
-    it('reauthenticates before updating password when current password is valid', async () => {
+    it('reauthenticates, then asks the SERVER to change the password', async () => {
       const callOrder: string[] = [];
       (reauthenticateWithCredential as jest.Mock).mockImplementationOnce(async () => {
         callOrder.push('reauthenticate');
       });
-      (updatePassword as jest.Mock).mockImplementationOnce(async () => {
-        callOrder.push('updatePassword');
+      (api as jest.Mock).mockImplementationOnce(async () => {
+        callOrder.push('api');
+        return {};
       });
 
       renderScreen(<ParentChangePassScreen />);
@@ -150,9 +152,15 @@ describe('guardian change password screen', () => {
       });
 
       await waitFor(() => {
-        expect(callOrder).toEqual(['reauthenticate', 'updatePassword']);
+        expect(callOrder).toEqual(['reauthenticate', 'api']);
       });
-      expect(updatePassword).toHaveBeenCalledWith(expect.anything(), 'ValidNewPass123!');
+      expect(api).toHaveBeenCalledWith(
+          '/api/auth/initial-password',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.objectContaining({ new_password: 'ValidNewPass123!' }),
+          }),
+        );
     });
   });
 
@@ -198,7 +206,13 @@ describe('guardian change password screen', () => {
       });
 
       await waitFor(() => {
-        expect(updatePassword).toHaveBeenCalledWith(expect.anything(), 'BrandNewPass123!');
+        expect(api).toHaveBeenCalledWith(
+          '/api/auth/initial-password',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.objectContaining({ new_password: 'BrandNewPass123!' }),
+          }),
+        );
       });
       expect(reauthenticateWithCredential).not.toHaveBeenCalled();
     });

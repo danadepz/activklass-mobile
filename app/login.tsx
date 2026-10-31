@@ -167,7 +167,15 @@ export default function LoginScreen() {
               />
               <View className="mt-2 space-y-1">
                 <Text className="text-ink-faint text-[11px] leading-relaxed">
-                  • <Text className="font-semibold text-ink-soft">Students:</Text> Enter your school login ID (e.g. srnhs-200012). Default password: pass1234
+                  {/* Audit F-03: this line used to end by naming the shared
+                      starting password in full. It ships in every release APK,
+                      so that credential was readable by anyone who installed
+                      the app -- alongside the login-ID format, which is the
+                      other half of it. The teacher hands the password over in
+                      person (it is emailed to nobody), so the app never needed
+                      to state it. src/test/publicDocsCredentials.test.ts keeps
+                      it out of every screen and of the built bundle. */}
+                  • <Text className="font-semibold text-ink-soft">Students:</Text> Enter your school login ID (e.g. srnhs-200012). Your teacher gives you your starting password.
                 </Text>
                 <Text className="text-ink-faint text-[11px] leading-relaxed">
                   • <Text className="font-semibold text-ink-soft">Parents:</Text> Enter your registered email address.

@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { updatePassword, signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../../src/config/firebase';
+import { signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { useThemeColors } from '../../src/theme';
 import { passwordError, PASSWORD_RULE } from '../../src/lib/validation';
+import { api } from '../../src/lib/api';
 
 export default function StudentChangePassScreen() {
   const c = useThemeColors();
@@ -77,19 +77,24 @@ export default function StudentChangePassScreen() {
         await reauthenticateWithCredential(currentUser, credential);
       }
 
-      // 3. Update password in Firebase Auth
-      await updatePassword(currentUser, newPassword);
+      // 3. The server performs the change, and only then lifts the
+      //    restriction. This used to be a client `updatePassword()` followed by
+      //    this screen writing `is_temp_password: false` into Firestore itself
+      //    -- so the backend never learned whether a password had actually
+      //    changed, and firestore.rules let a student write that very field, so
+      //    the forced-change gate could be cleared without changing anything.
+      //    `POST /api/auth/initial-password` updates Firebase Auth through the
+      //    Admin SDK, clears the `must_change_password` custom claim, and
+      //    writes the Firestore mirror; the claim is what the backend enforces
+      //    on every request, and no client can write it.
+      await api('/api/auth/initial-password', {
+        method: 'POST',
+        body: { new_password: newPassword, confirm_password: confirmPassword },
+      });
 
-      // 4. Remove is_temp_password flag from Firestore user profile, and stamp
-      //    when it happened. Best-effort after Auth update, matching web.
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          is_temp_password: false,
-          password_changed_at: serverTimestamp(),
-        });
-      } catch (flagErr) {
-        console.warn('[StudentChangePass] password state not recorded:', flagErr);
-      }
+      // 4. The lifted claim lives in the ID token, so force a refresh or the
+      //    next request still presents a restricted token and gets a 403.
+      await currentUser.getIdToken(true);
 
       // 5. Refresh context profile so that status updates
       if (typeof refreshProfile === 'function') {
