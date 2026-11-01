@@ -63,7 +63,13 @@ export async function loadClassPerformance(
           tracks: readTracks(p?.tracks),
         }))
       : [],
-    assessments: Array.isArray(e.assessments) ? e.assessments : [],
+    assessments: Array.isArray(e.assessments)
+      ? e.assessments.map((a: any) => ({
+          ...a,
+          // The stored entry uses raw_score; the screen uses student_score.
+          student_score: a.raw_score ?? a.student_score ?? null,
+        }))
+      : [],
   };
 }
 
