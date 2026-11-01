@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { teacherNameFor } from '../../src/lib/teachers';
@@ -17,6 +18,7 @@ interface ClassItem {
 }
 
 export default function StudentClassesIndex() {
+  useRequireAuth();
   const router = useRouter();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);

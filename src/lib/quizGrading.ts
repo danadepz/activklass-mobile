@@ -15,8 +15,20 @@
  *   essay:        rubric: string                           answer = string (teacher-graded)
  *
  * Grades are deterministic and never decided by an LLM (essays are queued for
- * the teacher). Note: answer keys are readable by clients today -- hardening
- * that split is a known follow-up (see firestore.rules quizzes comment).
+ * the teacher).
+ *
+ * Group 7 (audit F-06) closed the note that used to be here. Answer keys are no
+ * longer in the quiz document a student reads -- they live in
+ * `quiz_keys/{quizId}`, which no student rule grants. A student's score comes
+ * from `POST /api/quiz_attempts/{id}/submit` and the answers on their feedback
+ * screen from `GET /api/quiz_attempts/{id}/review`, so gradeAnswer, gradeQuiz
+ * and correctAnswerText below now only ever answer for a LEGACY quiz the
+ * migration has not reached.
+ *
+ * `matchingChoices` and `matchingLefts` are the exceptions, and the reason a
+ * `matching` field exists on the public question: the player has to draw the
+ * rows and the choices, so the left and right terms are denormalised onto the
+ * quiz document UNPAIRED. Both read that first and fall back to `answer_key`.
  */
 
 /** One row of the `per_question` array stored on a quiz attempt. */
@@ -136,11 +148,13 @@ export function correctAnswerText(q: any): string {
     case 'mcq':
       return (q.options ?? []).find((o: any) => o.is_correct)?.text ?? '—';
     case 'true_false':
-      return q.answer_key?.value ? 'True' : 'False';
+      // No key at all is not an answer of False. Same guard as the web copy.
+      if (q.answer_key?.value === undefined) return '—';
+      return q.answer_key.value ? 'True' : 'False';
     case 'short_answer':
       return (q.answer_key?.answers ?? []).join('  /  ') || '—';
     case 'matching':
-      return (q.answer_key?.pairs ?? []).map((p: any) => `${p.left} → ${p.right}`).join('; ');
+      return (q.answer_key?.pairs ?? []).map((p: any) => `${p.left} → ${p.right}`).join('; ') || '—';
     case 'essay':
       return q.rubric ? `Rubric: ${q.rubric}` : 'Graded by your teacher';
     default:
@@ -158,8 +172,8 @@ export function studentAnswerText(q: any, answer: any): string {
     case 'short_answer':
       return String(answer ?? '').trim() ? String(answer) : '— (no answer)';
     case 'matching':
-      return (q.answer_key?.pairs ?? [])
-        .map((p: any, i: number) => `${p.left} → ${answer?.[i] || '?'}`)
+      return matchingLefts(q)
+        .map((left: string, i: number) => `${left} → ${answer?.[i] || '?'}`)
         .join('; ');
     case 'essay':
       return String(answer ?? '').trim() ? String(answer) : '— (no answer)';
@@ -170,7 +184,20 @@ export function studentAnswerText(q: any, answer: any): string {
 
 /** Right-hand options for a matching question (deduped). */
 export function matchingChoices(q: any): string[] {
+  if (q?.matching?.rights) return q.matching.rights as string[];
   return [...new Set((q.answer_key?.pairs ?? []).map((p: any) => p.right))] as string[];
+}
+
+/**
+ * Left-hand terms of a matching question, in the order they are asked.
+ *
+ * The player renders one row per entry and the student's answer is keyed by
+ * index, so this order IS the answer's shape. One source for it, so the player
+ * and studentAnswerText cannot disagree about which row is row 3.
+ */
+export function matchingLefts(q: any): string[] {
+  if (q?.matching?.lefts) return q.matching.lefts as string[];
+  return (q.answer_key?.pairs ?? []).map((p: any) => p.left) as string[];
 }
 
 /**
@@ -192,10 +219,10 @@ export function normaliseLegacyAnswers(quiz: any, answers: any): Record<string, 
       else if (a === 'False') out[q.id] = false;
     }
     if (q.qtype === 'matching' && typeof a === 'object') {
-      const pairs = q.answer_key?.pairs ?? [];
+      const lefts = matchingLefts(q);
       const byIndex: Record<number, any> = {};
-      pairs.forEach((p: any, i: number) => {
-        byIndex[i] = a[i] ?? a[p.left];
+      lefts.forEach((left: string, i: number) => {
+        byIndex[i] = a[i] ?? a[left];
       });
       out[q.id] = byIndex;
     }

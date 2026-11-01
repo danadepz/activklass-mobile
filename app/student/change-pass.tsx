@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, BackHandler, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { signOut, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
@@ -20,7 +20,13 @@ export default function StudentChangePassScreen() {
   // Two ways in: forced at sign-in on an issued student account, or reached
   // deliberately from the student profile screen. Only the first is a first-time setup,
   // and only the first should land on the student dashboard afterwards.
-  const isForced = Boolean(profile?.is_temp_password);
+    const isForced = Boolean(profile?.is_temp_password);
+
+  useEffect(() => {
+    if (!isForced) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => subscription.remove();
+  }, [isForced]);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -30,6 +36,7 @@ export default function StudentChangePassScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleUpdatePassword = async () => {
     // 1. In voluntary flow, verify current password is provided before touching anything
@@ -56,6 +63,7 @@ export default function StudentChangePassScreen() {
 
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const currentUser = auth.currentUser;
@@ -101,13 +109,31 @@ export default function StudentChangePassScreen() {
         await refreshProfile();
       }
 
-      // 6. Forced first-time setup ends at the student dashboard; a voluntary change
-      //    returns to wherever they came from (e.g. profile).
-      if (isForced) {
-        router.replace('/student/dashboard');
-      } else {
-        router.back();
-      }
+      setSuccess('Your password has been changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+
+      // 6. Prompt confirmation before navigating to student dashboard or previous screen
+      Alert.alert(
+        'Password Changed Successfully',
+        isForced
+          ? 'Your new password has been set. You can now access your student dashboard.'
+          : 'Your password has been changed successfully.',
+        [
+          {
+            text: isForced ? 'Go to Dashboard' : 'OK',
+            onPress: () => {
+              if (isForced) {
+                router.replace('/student/dashboard');
+              } else {
+                router.back();
+              }
+            },
+          },
+        ],
+        { cancelable: false }
+      );
 
     } catch (err: any) {
       console.error('[StudentChangePass] Error updating password:', err);
@@ -167,6 +193,14 @@ export default function StudentChangePassScreen() {
         {/* Form Fields */}
         <View className="flex-1 justify-center space-y-4">
           
+          {success && (
+            <View className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl mb-4">
+              <Text className="text-emerald-400 text-xs font-semibold">
+                ✓ {success}
+              </Text>
+            </View>
+          )}
+
           {error && (
             <View className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl mb-4">
               <Text className="text-danger text-xs font-semibold">
@@ -299,6 +333,12 @@ export default function StudentChangePassScreen() {
               {isForced ? 'Sign Out' : 'Cancel'}
             </Text>
           </TouchableOpacity>
+
+          <View className="items-center mt-6">
+            <Text className="text-ink-faint text-[10px] font-mono">
+              v1.0.2 (Build 3)
+            </Text>
+          </View>
         </View>
 
       </ScrollView>

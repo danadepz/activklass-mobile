@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import {
   doc,
   getDoc,
@@ -12,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
-import { isAnswered, matchingChoices } from '../../src/lib/quizGrading';
+import { isAnswered, matchingChoices, matchingLefts } from '../../src/lib/quizGrading';
 import { questionsForAttempt, questionsForStudent } from '../../src/lib/quizPool';
 import {
   attemptsAllowedFor,
@@ -74,6 +75,7 @@ function gateFor(quiz: any, attempts: any[], studentId?: string): { title: strin
 }
 
 export default function QuizPlayer() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
@@ -604,11 +606,15 @@ export default function QuizPlayer() {
           {currentQ.qtype === 'matching' && (
             <View className="mt-2">
               <Text className="text-ink-muted text-xs mb-2">Tap an option to pair it with each item:</Text>
-              {(currentQ.answer_key?.pairs ?? []).map((pair: any, rowIndex: number) => {
+              {/* Group 7: the rows come from the quiz document's unpaired
+                  `matching.lefts` (matchingLefts falls back to answer_key for a
+                  quiz the migration has not reached). The pairing lives in
+                  quiz_keys, which no student client can read. */}
+              {matchingLefts(currentQ).map((left: string, rowIndex: number) => {
                 const chosen = answers[currentQ.id]?.[rowIndex];
                 return (
                   <View key={rowIndex} className="bg-surface border border-hairline rounded-xl p-3 mb-2">
-                    <Text className="text-ink-soft text-sm mb-2">{pair.left}</Text>
+                    <Text className="text-ink-soft text-sm mb-2">{left}</Text>
                     <View className="flex-row flex-wrap gap-2">
                       {matchingChoices(currentQ).map((choice: string) => (
                         <TouchableOpacity

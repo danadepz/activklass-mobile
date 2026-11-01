@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
@@ -17,8 +18,10 @@ import { questionsOfAttempt } from '../../src/lib/quizPool';
 import { finishedAttempts } from '../../src/lib/quizAttempts';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../src/theme';
+import { api } from '../../src/lib/api';
 
 export default function QuizFeedback() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const { attemptId } = useLocalSearchParams();
@@ -27,6 +30,7 @@ export default function QuizFeedback() {
   const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [attemptCount, setAttemptCount] = useState(1);
+  const [correctAnswers, setCorrectAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!attemptId) return;
@@ -61,6 +65,26 @@ export default function QuizFeedback() {
             setAttemptCount(Math.max(finished.length, attemptData.attempt_number ?? 1));
           } catch {
             setAttemptCount(attemptData.attempt_number ?? 1);
+          }
+
+          /* Group 7 (audit F-06): the correct answers are no longer in the
+             quiz document -- they are in `quiz_keys/{quizId}`, which no student
+             rule grants. The server hands them over for a finished attempt,
+             and only when this quiz's own release rule allows it
+             (app/services/quiz_feedback.py -- the same rule
+             feedbackVisibility() applies below, now actually enforced rather
+             than merely obeyed).
+
+             Best-effort, and deliberately NOT allowed to fail this screen: a
+             quiz the migration has not reached still carries its keys inline,
+             which correctAnswerText(q) reads as the fallback. */
+          try {
+            const review = await api<{ correct_answers?: Record<string, string> }>(
+              `/api/quiz_attempts/${attemptId}/review`
+            );
+            setCorrectAnswers(review?.correct_answers ?? {});
+          } catch {
+            /* Fallback covers it. */
           }
         } else {
           Alert.alert('Error', 'Quiz attempt details not found.');
@@ -205,7 +229,9 @@ export default function QuizFeedback() {
               const possible = pq?.possible ?? q.points ?? 0;
 
               const responseLabel = studentAnswerText(q, legacyAnswers[q.id]);
-              const correctLabel = correctAnswerText(q);
+              // The server's answer wins; correctAnswerText(q) only answers
+              // for a legacy quiz whose keys are still in its own document.
+              const correctLabel = correctAnswers[q.id] ?? correctAnswerText(q);
 
               return (
                 <View key={q.id} className="bg-surface border border-hairline p-5 rounded-2xl mt-4">

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { StatusBar } from 'expo-status-bar';
 import {
   AppNotification,
@@ -60,6 +61,7 @@ function formatExactDateTime(millis: number | null): string {
 }
 
 export default function NotificationsScreen() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const [items, setItems] = useState<AppNotification[]>([]);

@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
  * and redirecting then would throw out a user who is in fact signed in.
  */
 export function useRequireAuth({ allowTempPassword = false }: { allowTempPassword?: boolean } = {}) {
-  const { status, profile } = useAuth();
+  const { status, profile, firebaseUser } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -29,19 +29,46 @@ export function useRequireAuth({ allowTempPassword = false }: { allowTempPasswor
       return;
     }
 
+    if (allowTempPassword) {
+      return;
+    }
+
     /* An account an admin or teacher provisioned starts on a temporary password,
        and `is_temp_password` stays true until the user replaces it themselves.
        Gate here so deep links, bookmarks, or reloads cannot bypass the password
        change requirement. Protected routes call useRequireAuth(); only the
        change-pass screens pass allowTempPassword: true to opt out. */
-    if (!allowTempPassword && profile?.is_temp_password) {
+    if (profile?.is_temp_password) {
       if (profile.role === 'parent') {
         router.replace('/parent/change-pass');
-      } else if (profile.role === 'student') {
+      } else {
         router.replace('/student/change-pass');
       }
+      return;
     }
-  }, [status, profile, allowTempPassword, router]);
+
+    // Defense in depth: also check the Firebase custom claim in case Firestore profile
+    // has not synced or was tampered with locally.
+    let isMounted = true;
+    if (firebaseUser && typeof firebaseUser.getIdTokenResult === 'function') {
+      firebaseUser.getIdTokenResult().then((tokenResult) => {
+        if (!isMounted) return;
+        if (tokenResult?.claims?.must_change_password) {
+          if (profile?.role === 'parent') {
+            router.replace('/parent/change-pass');
+          } else {
+            router.replace('/student/change-pass');
+          }
+        }
+      }).catch(() => {
+        // Ignore token check errors if offline
+      });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [status, profile, firebaseUser, allowTempPassword, router]);
 
   return status;
 }

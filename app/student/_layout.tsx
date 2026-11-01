@@ -2,27 +2,41 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
+import { useAuth } from '../../src/context/AuthContext';
 import { useThemeColors } from '../../src/theme';
 
 export default function StudentLayout() {
   // Every screen under /student needs a session; signing out from any of them
   // returns to the landing screen instead of leaving the tabs mounted.
   useRequireAuth();
+  const { profile } = useAuth();
+  const isTemp = Boolean(profile?.is_temp_password);
+
   // The bar takes colours as props, so it cannot follow the class-based
   // palette and stayed black the first time light mode was switched on.
   const c = useThemeColors();
+
+  const tabListener = {
+    tabPress: (e: any) => {
+      if (isTemp) {
+        e.preventDefault();
+      }
+    },
+  };
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: c.surface,
-          borderTopColor: c.hairline,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
+        tabBarStyle: isTemp
+          ? { display: 'none' }
+          : {
+              backgroundColor: c.surface,
+              borderTopColor: c.hairline,
+              height: 60,
+              paddingBottom: 8,
+              paddingTop: 8,
+            },
         tabBarActiveTintColor: c.accentText,
         tabBarInactiveTintColor: c.inkMuted,
         tabBarLabelStyle: {
@@ -33,6 +47,7 @@ export default function StudentLayout() {
     >
       <Tabs.Screen
         name="dashboard"
+        listeners={tabListener}
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, focused }) => (
@@ -42,6 +57,7 @@ export default function StudentLayout() {
       />
       <Tabs.Screen
         name="classes"
+        listeners={tabListener}
         options={{
           title: 'My Classes',
           tabBarIcon: ({ color, focused }) => (
@@ -51,6 +67,7 @@ export default function StudentLayout() {
       />
       <Tabs.Screen
         name="remediation"
+        listeners={tabListener}
         options={{
           title: 'Remediation',
           tabBarIcon: ({ color, focused }) => (
@@ -60,6 +77,7 @@ export default function StudentLayout() {
       />
       <Tabs.Screen
         name="profile"
+        listeners={tabListener}
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
@@ -76,7 +94,13 @@ export default function StudentLayout() {
       <Tabs.Screen name="quiz-player" options={{ href: null }} />
       <Tabs.Screen name="quiz-feedback" options={{ href: null }} />
       <Tabs.Screen name="class/[classId]" options={{ href: null }} />
-      <Tabs.Screen name="change-pass" options={{ href: null }} />
+      <Tabs.Screen
+        name="change-pass"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
     </Tabs>
   );
 }

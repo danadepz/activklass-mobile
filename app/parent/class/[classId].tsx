@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRequireAuth } from '../../../src/hooks/useRequireAuth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
@@ -59,6 +60,7 @@ function Empty({ text }: { text: string }) {
 }
 
 export default function ParentClassDetail() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const params = useLocalSearchParams();

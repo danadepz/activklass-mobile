@@ -242,6 +242,9 @@ export default function LoginScreen() {
           <Text className="text-ink-faint text-xs font-medium">
             ActivKlass Class Record System · Pilot Cebu
           </Text>
+          <Text className="text-ink-faint text-[10px] font-mono mt-1">
+            v1.0.2 (Build 3)
+          </Text>
         </View>
 
       </ScrollView>

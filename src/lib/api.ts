@@ -16,6 +16,53 @@ import { auth } from '../config/firebase';
 // time and bracket access or destructuring is NOT replaced.
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
+/**
+ * Normalizes relative API endpoint paths so that backend requests consistently
+ * route through the `/api` prefix expected by the backend blueprint registration.
+ *
+ * Direct port of activklass-web/src/lib/api.js normalizeApiPath.
+ */
+export function normalizeApiPath(path: string): string {
+  if (typeof path !== 'string' || !path.trim()) {
+    throw new TypeError('Path must be a non-empty string');
+  }
+
+  // Preserve absolute external URLs and protocol-relative URLs
+  if (/^(?:[a-z]+:)?\/\//i.test(path)) {
+    return path;
+  }
+
+  const trimmed = path.trim();
+
+  // Already prefixed with /api
+  if (
+    trimmed === '/api' ||
+    trimmed.startsWith('/api/') ||
+    trimmed.startsWith('/api?') ||
+    trimmed.startsWith('/api#')
+  ) {
+    return trimmed;
+  }
+
+  // Prefixed with api without leading slash (e.g. "api/quiz_attempts/...")
+  if (
+    trimmed === 'api' ||
+    trimmed.startsWith('api/') ||
+    trimmed.startsWith('api?') ||
+    trimmed.startsWith('api#')
+  ) {
+    return `/${trimmed}`;
+  }
+
+  // Relative path with leading slash (e.g. "/quiz_attempts/123/submit")
+  if (trimmed.startsWith('/')) {
+    return `/api${trimmed}`;
+  }
+
+  // Relative path without leading slash (e.g. "quiz_attempts/123/submit")
+  return `/api/${trimmed}`;
+}
+
 /** Backend error codes worth branching on (see docs/07 §3). */
 export type ApiErrorCode =
   | 'not_linked'
@@ -46,15 +93,17 @@ export class ApiError extends Error {
   }
 }
 
-function requireBaseUrl(): string {
-  if (!BASE_URL) {
+export function requireBaseUrl(customBase?: string): string {
+  const raw = customBase !== undefined ? customBase : BASE_URL;
+  if (!raw) {
     throw new ApiError(
       'The app is not configured to reach the server. Set EXPO_PUBLIC_API_URL in .env.',
       'unknown',
       0
     );
   }
-  return BASE_URL.replace(/\/+$/, '');
+  // Strip trailing slashes and any trailing /api so combining with normalized path never duplicates /api
+  return raw.replace(/\/+$/, '').replace(/\/api$/, '');
 }
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -76,13 +125,18 @@ interface RequestOptions {
 export async function api<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, params } = options;
   const base = requireBaseUrl();
+  const normalizedPath = normalizeApiPath(path);
+  const isExternal = /^(?:[a-z]+:)?\/\//i.test(normalizedPath);
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value != null && value !== '') query.append(key, value);
   }
   const qs = query.toString();
-  const url = `${base}${path.startsWith('/') ? path : `/${path}`}${qs ? `?${qs}` : ''}`;
+  const sep = normalizedPath.includes('?') ? '&' : '?';
+  const url = isExternal
+    ? `${normalizedPath}${qs ? `${sep}${qs}` : ''}`
+    : `${base}${normalizedPath}${qs ? `${sep}${qs}` : ''}`;
 
   const headers: Record<string, string> = { ...(await authHeader()) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -117,8 +171,16 @@ export async function api<T = any>(path: string, options: RequestOptions = {}): 
   }
 
   if (!response.ok) {
+    const isHtml = payload === null && raw.trimStart().startsWith('<');
+    if (isHtml) {
+      throw new ApiError(
+        `The ActivKlass server returned HTML (${response.status}) instead of JSON for ${url}.`,
+        'network',
+        response.status
+      );
+    }
     throw new ApiError(
-      payload?.message || payload?.error || `Request failed (${response.status})`,
+      payload?.message || payload?.error || `Request failed (${response.status}) [${url}]`,
       (payload?.error as ApiErrorCode) || 'unknown',
       response.status,
       payload?.scope

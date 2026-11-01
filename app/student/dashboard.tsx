@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { Svg, Circle } from 'react-native-svg';
 import { auth, db } from '../../src/config/firebase';
@@ -32,6 +33,7 @@ interface ClassItem {
 }
 
 export default function StudentDashboard() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const { profile } = useAuth();

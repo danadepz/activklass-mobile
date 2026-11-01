@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useRequireAuth } from '../../src/hooks/useRequireAuth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../src/config/firebase';
 import { useAuth } from '../../src/context/AuthContext';
@@ -19,6 +20,7 @@ import { AvatarError, pickAvatarFromGallery } from '../../src/lib/avatar';
    their age to control their own consent gate. What enforces both now is
    firestore.rules, not any screen. */
 export default function StudentProfileScreen() {
+  useRequireAuth();
   const router = useRouter();
   /* The photo is the ONE field a student may write on their own profile
      (firestore.rules restricts them to photo_url); everything else is

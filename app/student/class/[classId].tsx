@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRequireAuth } from '../../../src/hooks/useRequireAuth';
 import { doc, collection, query, where, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Svg, Line, Circle, Text as SvgText, Polygon, Polyline, Defs, LinearGradient, Stop, G } from 'react-native-svg';
 import { auth, db } from '../../../src/config/firebase';
@@ -47,6 +48,7 @@ function formatExactDateTime(millis: number | null): string {
 }
 
 export default function StudentClassDetail() {
+  useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
   const { classId, tab } = useLocalSearchParams<{ classId: string; tab?: string; topic?: string }>();
