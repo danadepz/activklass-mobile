@@ -81,10 +81,16 @@ npx expo run:android
 ## Reaching the Flask API from the emulator
 
 Inside the emulator, `localhost` is the emulator, not your PC. `10.0.2.2` is
-the host. `.env` therefore reads:
+the host. For local backend development, `.env` therefore reads:
 
 ```
 EXPO_PUBLIC_API_URL=http://10.0.2.2:5000
+```
+
+For production, `.env` points to the Cloud Run backend instead:
+
+```
+EXPO_PUBLIC_API_URL=https://activklass-backend-59267706068.asia-southeast1.run.app
 ```
 
 Only the per-class grade and attendance screens need this. The guardian code,

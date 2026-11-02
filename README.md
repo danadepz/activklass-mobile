@@ -135,8 +135,12 @@ EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
 
-# Backend API Endpoint (Vercel / Cloud URL)
-EXPO_PUBLIC_API_URL=https://your-backend-api.vercel.app/api
+# Backend API Endpoint
+# Production (Cloud Run backend):
+EXPO_PUBLIC_API_URL=https://activklass-backend-59267706068.asia-southeast1.run.app
+# Local development (Android emulator accessing host machine Flask server on port 5000):
+# EXPO_PUBLIC_API_URL=http://10.0.2.2:5000
+# Note: On an Android emulator, 10.0.2.2 points to the host PC's localhost.
 ```
 
 ### 3. Launch Development Server
