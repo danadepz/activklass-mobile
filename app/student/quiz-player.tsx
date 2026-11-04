@@ -60,6 +60,16 @@ function gateFor(quiz: any, attempts: any[], studentId?: string): { title: strin
         title: 'Not open yet',
         message: `This quiz opens at ${new Date(quiz.opens_at).toLocaleString()}.`,
       };
+    case 'locked':
+      return {
+        title: 'Quiz attempt locked',
+        message: 'Your quiz attempt has been locked. Please contact your teacher to reopen it.',
+      };
+    case 'access_closed':
+      return {
+        title: 'Access restricted',
+        message: 'Access to this quiz has been restricted by your teacher. Please contact your teacher if you need help.',
+      };
     case 'closed':
       return { title: 'Quiz closed', message: 'The window for this quiz has passed.' };
     case 'no_attempts_left': {
@@ -78,7 +88,7 @@ export default function QuizPlayer() {
   useRequireAuth();
   const c = useThemeColors();
   const router = useRouter();
-  const { quizId } = useLocalSearchParams();
+  const { quizId, classId } = useLocalSearchParams();
 
   const [quiz, setQuiz] = useState<any>(null);
   /* Every attempt this student has on this quiz, open ones included. The count
@@ -340,7 +350,7 @@ export default function QuizPlayer() {
       justStartedRef.current = true;
       const created = await startAttempt({
         quiz: { ...quiz, id: quizId as string },
-        classId: quiz.class_id ?? null,
+        classId: typeof classId === 'string' ? classId : null,
         studentId: uid,
         questions,
         attemptNumber,
