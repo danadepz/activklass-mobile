@@ -192,6 +192,14 @@ describe('canStart', () => {
     expect(decision).toMatchObject({ ok: false, reason: 'no_attempts_left' });
   });
 
+  it('T-236: resumes an unlocked attempt on a closed quiz only while its grant lasts', () => {
+    const closed = { ...published, status: 'closed' };
+    const live = [{ status: IN_PROGRESS, attempt_number: 1, resume_until_ms: T0 + 60_000 }];
+    const spent = [{ status: IN_PROGRESS, attempt_number: 1, resume_until_ms: T0 - 1 }];
+    expect(canStart({ quiz: closed, attempts: live, now: T0 })).toEqual({ ok: true, resuming: true });
+    expect(canStart({ quiz: closed, attempts: spent, now: T0 })).toEqual({ ok: false, reason: 'closed' });
+  });
+
   it('refuses an unpublished quiz', () => {
     expect(canStart({ quiz: { status: 'draft' }, now: T0 }).reason).toBe('not_published');
   });
