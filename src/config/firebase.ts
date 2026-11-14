@@ -6,8 +6,10 @@ import {
   // @ts-ignore — getReactNativePersistence is not in the published types yet,
   // and it does not exist at all in the web build (see the Platform check below)
   getReactNativePersistence,
+  connectAuthEmulator,
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { isolatedEmulatorHost } from './isolation';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -45,5 +47,17 @@ const auth = initializeAuth(app, {
 
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+// T-267 isolated test mode (src/config/isolation.ts); null in every normal build.
+const emulatorHost = isolatedEmulatorHost({
+  emulatorHost: process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST,
+  projectId: firebaseConfig.projectId,
+  apiUrl: process.env.EXPO_PUBLIC_API_URL,
+  isDev: __DEV__,
+});
+if (emulatorHost) {
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+}
 
 export { app, auth, db, storage };
