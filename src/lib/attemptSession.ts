@@ -35,6 +35,29 @@ import { api } from './api';
 import { FOCUS_EVENT_CAP, expiryFrom, type FocusEvent } from './quizAttempts';
 
 /**
+ * T-259: a password quiz is unlocked by the server before any attempt exists.
+ * The quiz document carries only `password_required`; the password is checked
+ * by Flask, which writes the pass the attempt rule reads. A wrong password
+ * throws here, so `start` never runs. Same order as the web's unlockThenStart.
+ */
+export async function unlockThenStart<T>({
+  quiz,
+  classId,
+  password,
+  start,
+}: {
+  quiz: { id: string; password_required?: boolean };
+  classId?: string | null;
+  password: string;
+  start: () => Promise<T>;
+}): Promise<T> {
+  if (quiz.password_required === true) {
+    await api(`/api/quizzes/${quiz.id}/unlock`, { method: 'POST', body: { password, class_id: classId } });
+  }
+  return start();
+}
+
+/**
  * Open an attempt and return it.
  *
  * Two writes and a read, once per sitting. The read is the point: a server

@@ -60,6 +60,22 @@ describe('quiz player', () => {
     })))
   })
 
+  it('a password quiz asks for the password and will not start without one (T-259)', async () => {
+    ;(globalThis as any).__searchParams = { quizId: 'pw-quiz', classId: 'selected-class' }
+    const quiz = {
+      title: 'Locked Quiz', status: 'published', class_ids: ['selected-class'], password_required: true,
+      questions: [{ id: 'q1', text: 'Question', qtype: 'true_false', points: 1 }],
+    }
+    ;(getDoc as jest.Mock)
+      .mockResolvedValueOnce({ exists: () => true, data: () => quiz })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ student_ids: ['test-student'] }) })
+    await renderScreen(<QuizPlayer />)
+    await waitFor(() => expect(screen.getByText('Start')).toBeTruthy())
+    expect(screen.getByLabelText('Quiz password')).toBeTruthy()
+    await act(async () => { fireEvent.press(screen.getByText('Start')) })
+    expect(addDoc).not.toHaveBeenCalled()
+  })
+
   it('mounts when the quiz cannot be loaded', async () => {
     // Firestore is stubbed to return nothing, so this is the "quiz missing or
     // unreadable" path -- a deleted quiz, a revoked assignment, a bad link.

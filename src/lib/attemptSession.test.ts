@@ -13,7 +13,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 import { addDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { api } from './api';
-import { finishAttempt, startAttempt } from './attemptSession';
+import { finishAttempt, startAttempt, unlockThenStart } from './attemptSession';
 
 const input = {
   quiz: { id: 'quiz', class_ids: ['class-other', 'class-selected'] },
@@ -87,4 +87,30 @@ it('preserves server-anchored timing and server-side submission without keys or 
   expect(api).toHaveBeenCalledWith('/quiz_attempts/attempt/submit', {
     method: 'POST', body: { answers: { q1: 'option' }, expired: false },
   });
+});
+
+// T-259: a wrong quiz password must never open an attempt.
+it('unlockThenStart: a refused password never starts the attempt', async () => {
+  vi.mocked(api).mockRejectedValueOnce(new Error("That password isn't right."));
+  const start = vi.fn(async () => 'att');
+  await expect(
+    unlockThenStart({ quiz: { id: 'quiz-1', password_required: true }, classId: 'class-1', password: 'nope', start }),
+  ).rejects.toThrow("isn't right");
+  expect(start).not.toHaveBeenCalled();
+  expect(api).toHaveBeenCalledWith('/api/quizzes/quiz-1/unlock', { method: 'POST', body: { password: 'nope', class_id: 'class-1' } });
+});
+
+it('unlockThenStart: the right password unlocks, then starts', async () => {
+  const order: string[] = [];
+  vi.mocked(api).mockImplementationOnce(async () => { order.push('unlock'); return { ok: true }; });
+  await unlockThenStart({ quiz: { id: 'quiz-1', password_required: true }, classId: 'class-1', password: 'x', start: async () => { order.push('start'); } });
+  expect(order).toEqual(['unlock', 'start']);
+});
+
+it('unlockThenStart: a quiz without a password never calls the server', async () => {
+  vi.mocked(api).mockClear();
+  const start = vi.fn(async () => 'att');
+  await unlockThenStart({ quiz: { id: 'quiz-1' }, classId: 'class-1', password: '', start });
+  expect(api).not.toHaveBeenCalled();
+  expect(start).toHaveBeenCalled();
 });

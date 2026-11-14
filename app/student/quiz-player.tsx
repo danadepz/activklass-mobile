@@ -31,7 +31,9 @@ import {
   saveAnswers,
   recordReopen,
   startAttempt,
+  unlockThenStart,
 } from '../../src/lib/attemptSession';
+import { ApiError } from '../../src/lib/api';
 import { useThemeColors } from '../../src/theme';
 
 /**
@@ -97,6 +99,8 @@ export default function QuizPlayer() {
   const [attempts, setAttempts] = useState<any[]>([]);
   const [attempt, setAttempt] = useState<any>(null);
   const [starting, setStarting] = useState(false);
+  // T-259: typed here, checked by the server; the quiz document never holds it.
+  const [quizPassword, setQuizPassword] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -348,19 +352,29 @@ export default function QuizPlayer() {
     setStarting(true);
     try {
       justStartedRef.current = true;
-      const created = await startAttempt({
+      const cls = typeof classId === 'string' ? classId : null;
+      const created = await unlockThenStart({
         quiz: { ...quiz, id: quizId as string },
-        classId: typeof classId === 'string' ? classId : null,
-        studentId: uid,
-        questions,
-        attemptNumber,
+        classId: cls,
+        password: quizPassword,
+        start: () =>
+          startAttempt({
+            quiz: { ...quiz, id: quizId as string },
+            classId: cls,
+            studentId: uid,
+            questions,
+            attemptNumber,
+          }),
       });
       setAttempt(created);
       setAttempts((prev) => [...prev, created]);
     } catch (e) {
       justStartedRef.current = false;
       console.error(e);
-      Alert.alert('Could not start', 'The attempt could not be opened. Check your connection and try again.');
+      // The server's refusals (wrong password, too many tries, not set up) are
+      // written for the student; anything else stays the generic line.
+      const told = e instanceof ApiError && (e.status === 403 || e.status === 409 || e.status === 429 || e.code === 'network');
+      Alert.alert('Could not start', told ? (e as ApiError).message : 'The attempt could not be opened. Check your connection and try again.');
     } finally {
       setStarting(false);
     }
@@ -509,10 +523,25 @@ export default function QuizPlayer() {
               </View>
             ))}
             <View className="px-5 py-5">
+              {quiz.password_required === true && (
+                <View className="mb-4">
+                  <Text className="text-ink text-sm font-bold mb-2">Quiz password</Text>
+                  <TextInput
+                    accessibilityLabel="Quiz password"
+                    value={quizPassword}
+                    onChangeText={setQuizPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="Your teacher gives you this"
+                    className="border border-hairline rounded-xl px-4 py-3 text-ink bg-surface"
+                  />
+                </View>
+              )}
               <TouchableOpacity
                 onPress={beginAttempt}
-                disabled={starting}
-                className={`py-4 rounded-xl items-center ${starting ? 'opacity-60' : ''}`}
+                disabled={starting || (quiz.password_required === true && !quizPassword.trim())}
+                className={`py-4 rounded-xl items-center ${starting || (quiz.password_required === true && !quizPassword.trim()) ? 'opacity-60' : ''}`}
                 style={{ backgroundColor: '#1F8A5B' }}
               >
                 <Text className="text-white text-base font-bold">
