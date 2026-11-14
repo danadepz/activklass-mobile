@@ -11,6 +11,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemeColors } from '../../../src/theme';
 import { formatGrade, gradeTone, gradePolicy, itemPasses, passNote } from '../../../src/lib/gradeDisplay';
 import { loadSyllabus } from '../../../src/lib/studentData';
+import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '../../../src/lib/quizAttempts';
+import { STATE_BADGE, describeWindow, fromQuiz } from '../../../src/lib/deliverables';
 
 function parseTimestampMillis(ts: any): number | null {
   if (!ts) return null;
@@ -55,13 +57,15 @@ export default function StudentClassDetail() {
   const { profile } = useAuth();
   
   const [classInfo, setClassInfo] = useState<any>(null);
-  const initialTab = tab === 'topics' || tab === 'syllabus' ? 'syllabus' : tab === 'analytics' ? 'analytics' : tab === 'grades' ? 'grades' : tab === 'attendance' ? 'attendance' : tab === 'announcements' ? 'announcements' : 'syllabus';
-  const [activeTab, setActiveTab] = useState<'syllabus' | 'grades' | 'analytics' | 'attendance' | 'announcements'>(initialTab);
+  const initialTab = tab === 'topics' || tab === 'syllabus' ? 'syllabus' : tab === 'analytics' ? 'analytics' : tab === 'grades' ? 'grades' : tab === 'attendance' ? 'attendance' : tab === 'announcements' ? 'announcements' : tab === 'quizzes' ? 'quizzes' : 'syllabus';
+  const [activeTab, setActiveTab] = useState<'syllabus' | 'quizzes' | 'grades' | 'analytics' | 'attendance' | 'announcements'>(initialTab);
   const [loading, setLoading] = useState(true);
 
   // Syllabus / Topics State
   const [syllabus, setSyllabus] = useState<any>(null);
   const [quizzes, setQuizzes] = useState<any[]>([]);
+  // This student's attempts, by quiz -- the Quizzes tab's Done/Retake/View result (T-252).
+  const [attemptsByQuiz, setAttemptsByQuiz] = useState<Record<string, any[]>>({});
   
   // Grades / Grade Center State
   const [gradeEntry, setGradeEntry] = useState<any>(null);
@@ -206,6 +210,18 @@ export default function StudentClassDetail() {
       where('class_ids', 'array-contains', classId),
     );
     const unsubscribeQuizzesScalar = watchQuizzes('scalar', where('class_id', '==', classId));
+    const unsubscribeAttempts = onSnapshot(
+      query(collection(db, 'quiz_attempts'), where('student_id', '==', user.uid)),
+      (snapshot) => {
+        const byQuiz: Record<string, any[]> = {};
+        snapshot.docs.forEach((d) => {
+          const a: any = { id: d.id, ...d.data() };
+          (byQuiz[a.quiz_id] ??= []).push(a);
+        });
+        setAttemptsByQuiz(byQuiz);
+      },
+      (err) => console.error('attempts listener failed', err),
+    );
 
     // 4. Fetch Gradebook Entry for this specific Student
     const unsubscribeGrades = onSnapshot(doc(db, 'gradebooks', classId as string, 'entries', user.uid), (docSnap) => {
@@ -258,6 +274,7 @@ export default function StudentClassDetail() {
       unsubscribeSyllabus();
       unsubscribeQuizzesArray();
       unsubscribeQuizzesScalar();
+      unsubscribeAttempts();
       unsubscribeGrades();
       unsubscribeAttendance();
       unsubscribeAnnouncements();
@@ -480,6 +497,7 @@ export default function StudentClassDetail() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
           {([
             { id: 'syllabus', label: 'Modules' },
+            { id: 'quizzes', label: 'Quizzes' },
             { id: 'grades', label: 'Grades' },
             { id: 'analytics', label: 'Analytics' },
             { id: 'attendance', label: 'Attendance' },
@@ -551,6 +569,76 @@ export default function StudentClassDetail() {
                   <QuizLink key={quiz.id} quiz={quiz} />
                 ))}
               </View>
+            )}
+          </View>
+        )}
+
+        {/* QUIZZES TAB CONTENT (T-252) -- the web class page's Quizzes tab:
+            state and chip from the deliverables port, so a quiz reads the same
+            on both. Start goes through the player, which applies canStart()'s
+            access checks; results go through quiz-feedback, which applies the
+            teacher's release rule. Nothing here opens a quiz on its own. */}
+        {activeTab === 'quizzes' && (
+          <View className="pb-10">
+            {quizzes.length === 0 ? (
+              <View className="items-center py-10">
+                <Text className="text-ink text-sm font-bold">No Quizzes Yet</Text>
+                <Text className="text-ink-faint text-xs mt-1 text-center">Quizzes your teacher publishes for this class will show up here.</Text>
+              </View>
+            ) : (
+              quizzes.map((quiz) => {
+                const attempts = attemptsByQuiz[quiz.id] ?? [];
+                const finished = finishedAttempts(attempts);
+                const live = openAttempt(attempts);
+                const latest = finished[finished.length - 1] ?? null;
+                const allowed = attemptsAllowedFor(quiz, auth.currentUser?.uid);
+                const used = finished.length;
+                const window = fromQuiz(quiz, { attempts });
+                const sentence = describeWindow(window);
+                const badgeWord = STATE_BADGE[window.state];
+                const badge = window.state === 'done' || !badgeWord || sentence.startsWith(badgeWord) ? null : badgeWord;
+                const canTake = quiz.status === 'published' && (live || used < allowed);
+                const startable = canTake && window.state !== 'scheduled' && window.state !== 'closed';
+                const minutes = quiz.time_limit_minutes || quiz.time_limit;
+                return (
+                  <View key={quiz.id} className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2">
+                    <View className="flex-row flex-wrap items-center">
+                      <Text className="text-ink text-base font-bold font-sans mr-2">{quiz.title}</Text>
+                      {badge && (
+                        <Text className="text-ink-muted text-[10px] font-bold border border-hairline rounded-full px-2 py-0.5 mr-2">{badge}</Text>
+                      )}
+                    </View>
+                    <Text className="text-accent-text text-[11px] font-bold mt-2">{sentence}</Text>
+                    <Text className="text-ink-faint text-[10px] mt-2">
+                      {quiz.pool_enabled ? Number(quiz.pool_draw_count) || 0 : quiz.questions?.length || 0} items
+                      {minutes ? ` · ${minutes} min` : ' · No time limit'}
+                      {` · Attempts ${used}/${attemptsLabel(allowed)}`}
+                    </Text>
+                    {!!quiz.instructions && (
+                      <Text className="text-ink-muted text-xs mt-2 leading-relaxed" numberOfLines={3}>{quiz.instructions}</Text>
+                    )}
+                    <View className="flex-row justify-end items-center mt-4">
+                      {latest && (
+                        <TouchableOpacity
+                          onPress={() => router.push({ pathname: '/student/quiz-feedback', params: { attemptId: latest.id } })}
+                          className="border border-hairline rounded-xl px-4 py-2 mr-2"
+                        >
+                          <Text className="text-ink text-xs font-bold">View result</Text>
+                        </TouchableOpacity>
+                      )}
+                      {startable ? (
+                        <TouchableOpacity onPress={() => openQuiz(quiz.id)} className="bg-accent rounded-xl px-4 py-2">
+                          <Text className="text-on-accent text-xs font-bold">{live ? 'Resume' : used > 0 ? 'Retake' : 'Take quiz'}</Text>
+                        </TouchableOpacity>
+                      ) : !latest ? (
+                        <Text className="text-ink-faint text-xs">
+                          {window.state === 'scheduled' ? 'Opens later' : window.state === 'closed' ? 'Not taken' : 'No attempts left'}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })
             )}
           </View>
         )}

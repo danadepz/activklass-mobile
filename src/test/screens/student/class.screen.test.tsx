@@ -2,7 +2,7 @@
  * Does the student class detail screen mount?
  */
 import React from 'react'
-import { screen, waitFor } from '@testing-library/react-native'
+import { fireEvent, screen, waitFor } from '@testing-library/react-native'
 import { renderScreen } from '../../renderScreen'
 import StudentClassDetail from '../../../../app/student/class/[classId]'
 
@@ -66,5 +66,83 @@ describe('student class announcements tab (T-253)', () => {
     await renderScreen(<StudentClassDetail />)
     expect(await screen.findByText(/couldn't load announcements/i)).toBeTruthy()
     expect(screen.queryByText(/no announcements published/i)).toBeNull()
+  })
+})
+
+/**
+ * T-252: the class screen had no Quizzes tab, though it already listened to
+ * the class's quizzes. The tab must say what the web class page says for the
+ * same quiz (state from the deliverables port) and only start a quiz the
+ * player would accept.
+ */
+describe('student class quizzes tab (T-252)', () => {
+  const firestore = require('firebase/firestore')
+  const router = require('expo-router').useRouter()
+  // 'YYYY-MM-DDTHH:mm' local, the shape a quiz stores, `days` from now.
+  const at = (days: number) => {
+    const d = new Date(Date.now() + days * 86_400_000)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+  const serve = (byCollection: Record<string, any[]>) => {
+    firestore.collection.mockImplementation((_db: any, name: string) => ({ name }))
+    firestore.query.mockImplementation((ref: any) => ref)
+    firestore.onSnapshot.mockImplementation((ref: any, next: any) => {
+      const rows = byCollection[ref?.name]
+      if (rows) next({ docs: rows.map(({ id, ...data }) => ({ id, data: () => data })) })
+      return () => {}
+    })
+  }
+
+  beforeEach(() => {
+    ;(globalThis as any).__searchParams = { classId: 'class-1', tab: 'quizzes' }
+    router.push.mockClear()
+  })
+  afterEach(() => {
+    ;(globalThis as any).__searchParams = {}
+    firestore.collection.mockImplementation(() => ({}))
+    firestore.query.mockImplementation(() => ({}))
+    firestore.onSnapshot.mockImplementation(() => () => {})
+  })
+
+  it('has a Quizzes tab that says when a class has none', async () => {
+    serve({ quizzes: [], quiz_attempts: [], announcements: [] })
+    await renderScreen(<StudentClassDetail />)
+    expect(await screen.findByText('Quizzes')).toBeTruthy()
+    expect(screen.getByText('No Quizzes Yet')).toBeTruthy()
+  })
+
+  it('lists each quiz with the state the web list gives it, and starts only an open one', async () => {
+    serve({
+      quizzes: [
+        { id: 'open', title: 'Open quiz', status: 'published', closes_at: at(3), time_limit_minutes: 20 },
+        { id: 'past', title: 'Past quiz', status: 'published', closes_at: at(-3) },
+        { id: 'soon', title: 'Soon quiz', status: 'published', opens_at: at(5) },
+        { id: 'done', title: 'Done quiz', status: 'published', closes_at: at(3) },
+      ],
+      quiz_attempts: [{ id: 'att-1', quiz_id: 'done', status: 'graded', attempt_number: 1 }],
+      announcements: [],
+    })
+    await renderScreen(<StudentClassDetail />)
+    expect(await screen.findByText('Open quiz')).toBeTruthy()
+
+    expect(screen.getByText(/^Due \d\d-\d\d-\d\d, /)).toBeTruthy() // open
+    expect(screen.getByText(/^Closed \d\d-\d\d-\d\d$/)).toBeTruthy() // past closes_at
+    expect(screen.getByText('Not taken')).toBeTruthy()
+    expect(screen.getByText(/^Opens \d\d-\d\d-\d\d, /)).toBeTruthy() // not open yet
+    expect(screen.getByText('Opens later')).toBeTruthy()
+    expect(screen.getByText('Done')).toBeTruthy()
+
+    // Exactly one quiz is startable, and starting it goes to the player.
+    const take = screen.getAllByText('Take quiz')
+    expect(take).toHaveLength(1)
+    fireEvent.press(take[0])
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/student/quiz-player', params: expect.objectContaining({ quizId: 'open' }) }),
+    )
+
+    // A finished quiz opens its result through the feedback screen.
+    fireEvent.press(screen.getByText('View result'))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/student/quiz-feedback', params: { attemptId: 'att-1' } })
   })
 })
