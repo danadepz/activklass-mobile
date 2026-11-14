@@ -25,16 +25,41 @@
 import React from 'react'
 import { Alert } from 'react-native'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native'
-import { getDoc, getDocs } from 'firebase/firestore'
+import { addDoc, getDoc, getDocs } from 'firebase/firestore'
 import { renderScreen } from '../../renderScreen'
 import QuizPlayer from '../../../../app/student/quiz-player'
 
 beforeEach(() => {
   (globalThis as any).__searchParams = {}
   jest.restoreAllMocks()
+  ;(getDoc as jest.Mock).mockReset().mockResolvedValue({ exists: () => false, data: () => undefined })
+  ;(getDocs as jest.Mock).mockReset().mockResolvedValue({ empty: true, docs: [] })
+  ;(addDoc as jest.Mock).mockClear()
 })
 
 describe('quiz player', () => {
+  it('carries launch class context through Start into the new attempt', async () => {
+    ;(globalThis as any).__searchParams = { quizId: 'shared-quiz', classId: 'selected-class' }
+    const quiz = {
+      title: 'Shared Quiz', status: 'published',
+      class_ids: ['other-class', 'selected-class'],
+      questions: [{ id: 'q1', text: 'Question', qtype: 'true_false', points: 1 }],
+    }
+    ;(getDocs as jest.Mock).mockResolvedValue({ empty: true, docs: [] })
+    ;(getDoc as jest.Mock)
+      .mockResolvedValueOnce({ exists: () => true, data: () => quiz })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ student_ids: ['test-student'] }) })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({
+        class_id: 'selected-class', status: 'in_progress', question_ids: ['q1'],
+      }) })
+    await renderScreen(<QuizPlayer />)
+    await waitFor(() => expect(screen.getByText('Start')).toBeTruthy())
+    await act(async () => { fireEvent.press(screen.getByText('Start')) })
+    await waitFor(() => expect(addDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      class_id: 'selected-class', quiz_id: 'shared-quiz', student_id: 'test-student',
+    })))
+  })
+
   it('mounts when the quiz cannot be loaded', async () => {
     // Firestore is stubbed to return nothing, so this is the "quiz missing or
     // unreadable" path -- a deleted quiz, a revoked assignment, a bad link.

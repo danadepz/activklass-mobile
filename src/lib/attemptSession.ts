@@ -56,9 +56,26 @@ export async function startAttempt({
   questions: { id: string }[];
   attemptNumber: number;
 }) {
+  // Keep the class the student actually launched from. Array order is not
+  // enrollment or launch context: a shared quiz may list another class first.
+  // Legacy scalar-only quizzes have one unambiguous assignment.
+  const assignedClasses: string[] = Array.isArray(quiz.class_ids)
+    ? quiz.class_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    : quiz.class_id ? [quiz.class_id] : [];
+  const attemptClassId = classId ?? (Array.isArray(quiz.class_ids) ? null : quiz.class_id);
+  if (!attemptClassId || !assignedClasses.includes(attemptClassId)) {
+    throw new Error('Open this quiz from its assigned class before starting.');
+  }
+  // Fail before writing a broken attempt if enrollment was removed. This is
+  // a client consistency check, not an authorization boundary: the review
+  // endpoint still independently enforces enrollment and tenant isolation.
+  const classSnap = await getDoc(doc(db, 'classes', attemptClassId));
+  if (!classSnap.exists() || !classSnap.data()?.student_ids?.includes(studentId)) {
+    throw new Error('You are not enrolled in this quiz class.');
+  }
   const ref = await addDoc(collection(db, 'quiz_attempts'), {
     quiz_id: quiz.id,
-    class_id: classId ?? quiz.class_id ?? null,
+    class_id: attemptClassId,
     student_id: studentId,
     module_id: quiz.module_id ?? null,
     attempt_number: attemptNumber,

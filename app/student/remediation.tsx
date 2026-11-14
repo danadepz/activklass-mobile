@@ -533,7 +533,7 @@ export default function StudentRemediationIndex() {
                                       onPress={() =>
                                         router.push({
                                           pathname: '/student/quiz-player',
-                                          params: { quizId: quiz.id },
+                                          params: { quizId: quiz.id, classId: rem.class_id },
                                         })
                                       }
                                       className="bg-accent px-3.5 py-2 rounded-xl items-center justify-center shadow-sm"

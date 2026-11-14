@@ -421,7 +421,7 @@ export default function StudentClassDetail() {
   }
 
   const openQuiz = (quizId: string) =>
-    router.push({ pathname: '/student/quiz-player', params: { quizId } });
+    router.push({ pathname: '/student/quiz-player', params: { quizId, classId } });
 
   // A quiz is only drawn inside its module, so anything whose module_id is
   // null or points at a module this syllabus does not have had nowhere to
