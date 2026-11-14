@@ -20,6 +20,56 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../src/theme';
 import { api } from '../../src/lib/api';
 
+type Explanation = {
+  why_yours_is_wrong: string;
+  why_correct_is_right: string;
+  concept: string;
+  takeaway: string;
+};
+
+/* T-263: generated on tap, never on load -- the owner's cost decision. A null
+   explanation (the model disagreed with the teacher's key, the daily limit is
+   spent, AI is off) shows nothing; the Correct Answer box above still stands.
+   Same endpoint and same wording as the web feedback page. */
+function ExplainAnswer({ attemptId, questionId, studentText }: { attemptId: string; questionId: string; studentText: string }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'none'>('idle');
+  const [ex, setEx] = useState<Explanation | null>(null);
+  const explain = async () => {
+    setStatus('loading');
+    try {
+      const res = await api<{ explanation: Explanation | null }>(`/api/quiz_attempts/${attemptId}/explain`, {
+        method: 'POST',
+        body: { question_id: questionId },
+      });
+      setEx(res?.explanation ?? null);
+      setStatus(res?.explanation ? 'done' : 'none');
+    } catch {
+      setStatus('none');
+    }
+  };
+  if (status === 'none') return null;
+  if (status !== 'done' || !ex) {
+    return (
+      <TouchableOpacity
+        onPress={explain}
+        disabled={status === 'loading'}
+        accessibilityRole="button"
+        className="self-start mt-3 px-3 py-2 rounded-lg border border-hairline bg-surface"
+      >
+        <Text className="text-accent-text text-xs font-bold">{status === 'loading' ? 'Explaining…' : 'Explain my answer'}</Text>
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <View className="bg-indigo-950/15 border border-accent/25 p-4 rounded-xl mt-3 space-y-2">
+      <Text className="text-ink-soft text-xs leading-relaxed"><Text className="font-bold text-ink">Why “{studentText}” is wrong: </Text>{ex.why_yours_is_wrong}</Text>
+      <Text className="text-ink-soft text-xs leading-relaxed"><Text className="font-bold text-ink">Why the answer is right: </Text>{ex.why_correct_is_right}</Text>
+      <Text className="text-ink-soft text-xs leading-relaxed"><Text className="font-bold text-ink">The idea: </Text>{ex.concept}</Text>
+      <Text className="text-ink-soft text-xs leading-relaxed"><Text className="font-bold text-ink">Remember: </Text>{ex.takeaway}</Text>
+    </View>
+  );
+}
+
 export default function QuizFeedback() {
   useRequireAuth();
   const c = useThemeColors();
@@ -296,6 +346,9 @@ export default function QuizFeedback() {
                         {q.explanation}
                       </Text>
                     </View>
+                  )}
+                  {visible.showRationale && !isCorrect && !isPendingItem && !q.explanation && q.qtype !== 'essay' && (
+                    <ExplainAnswer attemptId={String(attemptId)} questionId={q.id} studentText={responseLabel} />
                   )}
                 </View>
               );
