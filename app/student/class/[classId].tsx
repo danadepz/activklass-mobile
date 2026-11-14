@@ -80,6 +80,8 @@ export default function StudentClassDetail() {
 
   // Announcements State
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  // A refused read must not look like a class with no announcements (T-253).
+  const [announcementsFailed, setAnnouncementsFailed] = useState(false);
 
   // Analytics Selection State
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -243,9 +245,11 @@ export default function StudentClassDetail() {
       const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
       list.sort((a: any, b: any) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
       setAnnouncements(list);
+      setAnnouncementsFailed(false);
       setLoading(false);
     }, (err) => {
       console.error(err);
+      setAnnouncementsFailed(true);
       setLoading(false);
     });
 
@@ -479,7 +483,7 @@ export default function StudentClassDetail() {
             { id: 'grades', label: 'Grades' },
             { id: 'analytics', label: 'Analytics' },
             { id: 'attendance', label: 'Attendance' },
-            { id: 'announcements', label: 'Bulletins' },
+            { id: 'announcements', label: 'Announcements' },
           ] as const).map((tabItem) => (
             <TouchableOpacity
               key={tabItem.id}
@@ -1120,9 +1124,13 @@ export default function StudentClassDetail() {
         {/* ANNOUNCEMENTS TAB CONTENT */}
         {activeTab === 'announcements' && (
           <View className="pb-10">
-            <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-3 mb-4">Class Bulletins</Text>
+            <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-3 mb-4">Class Announcements</Text>
             
-            {announcements.length === 0 ? (
+            {announcementsFailed ? (
+              <View className="items-center py-10">
+                <Text className="text-ink-faint text-sm text-center">Couldn't load announcements. Check your connection, then open this class again.</Text>
+              </View>
+            ) : announcements.length === 0 ? (
               <View className="items-center py-10">
                 <Text className="text-ink-faint text-sm">No announcements published in this class yet.</Text>
               </View>
