@@ -259,8 +259,9 @@ export default function StudentDashboard() {
 
         {/* Projected Academic Standing (Early-Warning Model) */}
         {profile?.id && (
-          <View className="mt-4">
+          <View key="projected-standing-wrapper" className="mt-4">
             <ClassStandingForecast
+              key={profile.id}
               studentId={profile.id}
               grade={overallGrade}
               attendanceRate={attendanceRate}

@@ -33,7 +33,7 @@ export default function ClassStandingForecast({
   attemptedQuizIds,
 }: ClassStandingForecastProps) {
   const [data, setData] = useState<RiskResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(Boolean(studentId));
   const [error, setError] = useState(false);
 
   const indicators = useMemo(
@@ -62,7 +62,10 @@ export default function ClassStandingForecast({
   );
 
   useEffect(() => {
-    if (!studentId) return;
+    if (!studentId) {
+      setLoading(false);
+      return;
+    }
 
     let isMounted = true;
     setLoading(true);
@@ -109,7 +112,7 @@ export default function ClassStandingForecast({
   const isAtRisk = data.atRisk;
 
   return (
-    <View className="bg-surface border border-hairline rounded-2xl p-4 my-2 shadow-sm">
+    <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
       <Text className="text-ink font-bold text-sm">Projected Standing</Text>
       <Text className="text-ink-muted text-xs mt-1 leading-relaxed">
         A projection, not a grade. It looks at where your attendance and scores are heading, so it
