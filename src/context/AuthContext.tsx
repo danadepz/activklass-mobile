@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export interface UserProfile {
@@ -66,6 +66,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile({ id: uid, ...data } as UserProfile);
       setStatus('signed_in');
       setErrorDetail(null);
+      // One best-effort stamp per authenticated session. Activity is separate
+      // from the profile document and rules require a student-owned, server-time
+      // write; failures (including an expired token) do not block profile load.
+      if (data.role === 'student' && data.status !== 'inactive') {
+        setDoc(doc(db, 'student_activity', uid), {
+          school_id: data.school_id ?? null,
+          last_active_at: serverTimestamp(),
+        }, { merge: true })
+          .catch((activityError: any) => console.warn('[AuthContext] activity stamp failed:', activityError.code ?? ''));
+      }
     } catch (err: any) {
       console.error('[AuthContext] Error loading profile:', err);
       setProfile(null);

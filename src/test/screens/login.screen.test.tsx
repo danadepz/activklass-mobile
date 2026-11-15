@@ -4,9 +4,8 @@ import { renderScreen } from '../renderScreen';
 import LoginScreen from '../../../app/login';
 
 describe('login screen', () => {
-  it('mounts without crashing', async () => {
-    renderScreen(<LoginScreen />);
-    await waitFor(() => expect(screen.toJSON()).toBeTruthy());
+  it('mounts without crashing', () => {
+    expect(() => renderScreen(<LoginScreen />)).not.toThrow();
   });
 
   it('displays unified Email or Student Login ID input with guidance', async () => {

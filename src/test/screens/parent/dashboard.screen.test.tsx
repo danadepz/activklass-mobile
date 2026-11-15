@@ -16,12 +16,13 @@ beforeEach(() => {
 describe('guardian dashboard', () => {
   it('mounts for a guardian with no children linked', async () => {
     renderScreen(<ParentDashboard />)
-    await waitFor(() => expect(screen.toJSON()).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('No Child Linked')).toBeTruthy())
   })
 
-  it('survives the first frame, before any read resolves', async () => {
-    renderScreen(<ParentDashboard />)
-    await waitFor(() => expect(screen.toJSON()).toBeTruthy())
+  it('survives the first frame before showing the empty state', async () => {
+    const rendered = renderScreen(<ParentDashboard />)
+    expect(rendered).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('No Child Linked')).toBeTruthy())
   })
 
   it('renders child metrics when child is approved', async () => {
