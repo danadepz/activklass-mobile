@@ -31,6 +31,10 @@ export const RISK_FEATURE_WEIGHTS: Record<string, number> = {
 };
 
 const RISK_FEATURES = Object.keys(RISK_FEATURE_WEIGHTS);
+const RISK_FEATURE_BOUNDS: Record<string, [number, number]> = {
+  prior_average_grade: [0, 100], attendance_rate: [0, 1], quiz_average: [0, 100],
+  attendance_trend: [-1, 1], quiz_trend: [-100, 100], missing_work_rate: [0, 1],
+};
 
 /**
  * Plain-language reasons, keyed by the `code` the backend attaches to each
@@ -78,7 +82,7 @@ export function riskReasons(signals: RiskSignal[] | null | undefined): string[] 
 function toAttendanceRate(value: unknown): number | undefined {
   if (value == null || value === '') return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return undefined;
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new TypeError('attendanceRate must be between 0 and 100');
   return n > 1 ? n / 100 : n;
 }
 
@@ -121,12 +125,16 @@ export function buildRiskIndicators({
     const value = candidates[feature];
     if (value == null || value === '') continue;
     const n = Number(value);
-    if (Number.isFinite(n)) indicators[feature] = n;
+    if (!Number.isFinite(n)) throw new TypeError(`${feature} must be a finite number`);
+    const [min, max] = RISK_FEATURE_BOUNDS[feature];
+    if (n < min || n > max) throw new RangeError(`${feature} is outside its supported range`);
+    indicators[feature] = n;
   }
   return indicators;
 }
 
 export interface RiskResult {
+  status: 'scored' | 'insufficient_data' | 'model_unavailable';
   flag: string | null;
   atRisk: boolean;
   probability: number | null;
@@ -147,15 +155,24 @@ export interface RiskResult {
 export function shapeRiskResult(raw: any, indicators: Record<string, number>): RiskResult {
   const supplied = Object.keys(indicators);
   const coverage = supplied.reduce((sum, f) => sum + (RISK_FEATURE_WEIGHTS[f] ?? 0), 0);
+  const complete = RISK_FEATURES.every((feature) => supplied.includes(feature));
+  const status = raw?.status === 'model_unavailable'
+    ? 'model_unavailable'
+    : raw?.status && raw.status !== 'scored'
+      ? 'insufficient_data'
+      : complete && raw?.risk_flag && Number.isFinite(raw?.risk_probability)
+        ? 'scored'
+        : 'insufficient_data';
   return {
-    flag: raw?.risk_flag ?? null,
-    atRisk: raw?.risk_flag === 'high_risk',
-    probability: raw?.risk_probability ?? null,
+    status,
+    flag: status === 'scored' ? raw.risk_flag : null,
+    atRisk: status === 'scored' && raw.risk_flag === 'high_risk',
+    probability: null,
     supplied,
     missing: RISK_FEATURES.filter((f) => !supplied.includes(f)),
     coverage: Math.round(coverage * 100) / 100,
     globalFactors: raw?.top_factors ?? [],
-    signals: raw?.signals ?? [],
+    signals: status === 'scored' ? (raw?.signals ?? []) : [],
     training: raw?.training ?? null,
   };
 }

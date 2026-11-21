@@ -104,9 +104,51 @@ describe('indicators', () => {
       { risk_flag: 'high_risk', risk_probability: 0.81, signals: [{ code: 'attendance_falling', value: -0.26 }] },
       { prior_average_grade: 70, attendance_trend: -0.26 },
     )
-    expect(shaped.atRisk).toBe(true)
+    expect(shaped.atRisk).toBe(false)
+    expect(shaped.status).toBe('insufficient_data')
+    expect(shaped.probability).toBeNull()
+    expect(shaped.flag).toBeNull()
+    expect(shaped.signals).toEqual([])
     expect(shaped.coverage).toBe(0.47)
     expect(shaped.missing).toContain('quiz_trend')
+  })
+
+  it('accepts a legacy scored response only when all six features were sent', () => {
+    const full = {
+      prior_average_grade: 70, attendance_rate: 0.9, quiz_average: 60,
+      attendance_trend: -0.1, quiz_trend: -5, missing_work_rate: 0.2,
+    }
+    const scored = shapeRiskResult({ risk_flag: 'high_risk', risk_probability: 0.75 }, full)
+    expect(scored.status).toBe('scored')
+    expect(scored.atRisk).toBe(true)
+    expect(scored.probability).toBeNull()
+
+    const partial = shapeRiskResult({ risk_flag: 'high_risk', risk_probability: 0.75 }, {
+      prior_average_grade: 70,
+    })
+    expect(partial.status).toBe('insufficient_data')
+    expect(partial.flag).toBeNull()
+    expect(partial.atRisk).toBe(false)
+    expect(partial.probability).toBeNull()
+  })
+
+  it('does not show a stale score when the backend marks data insufficient', () => {
+    const full = {
+      prior_average_grade: 70, attendance_rate: 0.9, quiz_average: 60,
+      attendance_trend: -0.1, quiz_trend: -5, missing_work_rate: 0.2,
+    }
+    const result = shapeRiskResult({
+      status: 'insufficient_data', risk_flag: 'high_risk', risk_probability: 0.75,
+    }, full)
+    expect(result.status).toBe('insufficient_data')
+    expect(result.probability).toBeNull()
+    expect(result.atRisk).toBe(false)
+  })
+
+  it('marks unavailable model responses separately', () => {
+    const result = shapeRiskResult({ status: 'model_unavailable', risk_flag: null }, {})
+    expect(result.status).toBe('model_unavailable')
+    expect(result.probability).toBeNull()
   })
 })
 
