@@ -97,10 +97,9 @@ export interface RiskInputs {
 
 /**
  * camelCase indicators -> the snake_case vector the endpoint expects, keeping
- * only what was actually measured. Omitting a field is not neutral: the
- * backend fills gaps with healthy cohort defaults, so a student we know only
- * a failing grade for still comes back `on_track`. We report what we sent so
- * the panel can qualify the result instead of presenting a guess as a finding.
+ * only what was actually measured. The explicit opt-in lets this client ask
+ * for an insufficient-data response; older backends may ignore it and return
+ * a legacy score, which shapeRiskResult still suppresses for partial vectors.
  */
 export function buildRiskIndicators({
   attendanceRate,
@@ -184,6 +183,9 @@ export function shapeRiskResult(raw: any, indicators: Record<string, number>): R
  */
 export async function predictRisk(inputs: RiskInputs): Promise<RiskResult> {
   const built = buildRiskIndicators(inputs);
-  const raw = await api('/api/predict', { method: 'POST', body: { indicators: built } });
+  const raw = await api('/api/predict', {
+    method: 'POST',
+    body: { indicators: built, accepts_insufficient_data: true },
+  });
   return shapeRiskResult(raw, built);
 }

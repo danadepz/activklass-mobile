@@ -1,5 +1,5 @@
 import React from 'react'
-import { screen } from '@testing-library/react-native'
+import { act, screen, waitFor } from '@testing-library/react-native'
 import { renderScreen } from '../../renderScreen'
 
 const mockPredictRisk = jest.fn()
@@ -25,5 +25,20 @@ describe('student risk forecast screen', () => {
     expect(screen.queryByText('On track')).toBeNull()
     expect(screen.queryByText('Needs attention')).toBeNull()
     expect(screen.queryByText(/\d+%/)).toBeNull()
+  })
+
+  it('hides the forecast when a legacy request receives HTTP 422', async () => {
+    let rejectRequest: (reason?: unknown) => void = () => {}
+    mockPredictRisk.mockReturnValue(new Promise((_, reject) => {
+      rejectRequest = reject
+    }))
+    await renderScreen(<ClassStandingForecast studentId="student-1" grade={80} />)
+    expect(await screen.findByText('Computing projection…')).toBeTruthy()
+
+    await act(async () => {
+      rejectRequest({ status: 422, code: 'insufficient_data' })
+    })
+    await waitFor(() => expect(screen.queryByText('Projected Standing')).toBeNull())
+    expect(screen.queryByText('On track')).toBeNull()
   })
 })

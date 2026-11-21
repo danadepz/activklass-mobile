@@ -4,6 +4,7 @@
  * hand the model the same vector and tell the student the same thing.
  */
 import { describe, expect, it, vi } from 'vitest'
+import { api } from './api'
 import {
   attendanceTrendFromLog,
   missedQuizCounts,
@@ -13,9 +14,43 @@ import {
   quizTrendFromAttempts,
   splitTrend,
 } from './riskSignals'
-import { buildRiskIndicators, riskReasons, shapeRiskResult } from './risk'
+import { buildRiskIndicators, predictRisk, riskReasons, shapeRiskResult } from './risk'
 
 vi.mock('./api', () => ({ api: vi.fn() }))
+
+describe('single-student backend compatibility', () => {
+  it('opts into explicit incomplete results and suppresses an older backend score', async () => {
+    vi.mocked(api).mockResolvedValue({
+      risk_flag: 'on_track', risk_probability: 0.16, model: 'random_forest',
+    })
+    const result = await predictRisk({ attendanceRate: 92 })
+
+    expect(vi.mocked(api)).toHaveBeenCalledWith('/api/predict', {
+      method: 'POST',
+      body: {
+        indicators: { attendance_rate: 0.92 },
+        accepts_insufficient_data: true,
+      },
+    })
+    // The current backend ignores the extra request field and can return a
+    // default-imputed score. New client shaping still hides that score.
+    expect(result.status).toBe('insufficient_data')
+    expect(result.flag).toBeNull()
+    expect(result.probability).toBeNull()
+  })
+
+  it('uses the updated backend explicit insufficient-data response', async () => {
+    vi.mocked(api).mockResolvedValue({
+      status: 'insufficient_data', risk_flag: null, risk_probability: null,
+      missing_features: ['quiz_trend'],
+    })
+    const result = await predictRisk({ attendanceRate: 92 })
+    expect(result.status).toBe('insufficient_data')
+    expect(result.flag).toBeNull()
+    expect(result.probability).toBeNull()
+    expect(result.missing).toContain('quiz_trend')
+  })
+})
 
 describe('trends', () => {
   it('needs enough history before it claims a trend', () => {
