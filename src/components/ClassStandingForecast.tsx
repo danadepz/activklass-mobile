@@ -106,6 +106,31 @@ export default function ClassStandingForecast({
 
   if (error || !data) return null;
 
+  if (data.status === 'insufficient_data') {
+    const missing = (data.missing ?? []).map((feature) => READABLE_FEATURE[feature] ?? feature);
+    return (
+      <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
+        <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+        <Text accessibilityRole="text" className="text-ink-muted text-xs mt-2 leading-relaxed">
+          Not enough recorded academic information to estimate risk yet. This projection needs all six indicators.
+          {missing.length ? ` Still needed: ${missing.join(', ')}.` : ''}
+        </Text>
+        <Text className="text-ink-faint text-[10px] mt-2">
+          No risk score or on-track status is available.
+        </Text>
+      </View>
+    );
+  }
+
+  if (data.status === 'model_unavailable') {
+    return (
+      <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
+        <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+        <Text className="text-ink-muted text-xs mt-2">The prediction service is unavailable right now.</Text>
+      </View>
+    );
+  }
+
   const supplied = data.supplied ?? [];
   const lowCoverage = (data.coverage ?? 0) < 0.7;
   const reasons = riskReasons(data.signals);
