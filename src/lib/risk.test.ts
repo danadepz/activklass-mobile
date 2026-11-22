@@ -312,3 +312,10 @@ describe('what the student is told', () => {
     for (const r of reasons) expect(r).not.toMatch(/at risk/i)
   })
 })
+
+describe('attendance unit contract (2026-11-23): percentage in, fraction out', () => {
+  it.each([[0, 0], [0.5, 0.005], [1, 0.01], [50, 0.5], [100, 1], [500 / 7, 5 / 7]])(
+    '%s%% -> %s', (pct, fraction) => {
+      expect(buildRiskIndicators({ attendanceRate: pct }).attendance_rate).toBeCloseTo(fraction, 12)
+    })
+})
