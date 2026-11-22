@@ -67,7 +67,8 @@ export interface ForecastInputs {
   quizzes: any[] | undefined;
   assessments: EntryAssessment[];
   attemptedQuizIds: Set<string> | undefined;
-  excusedQuizIds: Set<string> | null;
+  /** undefined = the excusal read failed: unknown, never "none excused". */
+  excusedQuizIds: Set<string> | undefined;
 }
 
 /**
@@ -110,7 +111,7 @@ export function forecastInputsFor({
     quizzes: evidence?.quizzes ? visibleQuizzesFor(evidence.quizzes, studentId) : undefined,
     assessments: withQuizLinks(entry?.assessments),
     attemptedQuizIds: attempts ? new Set(Object.keys(byQuiz)) : undefined,
-    excusedQuizIds: evidence?.excused ?? null,
+    excusedQuizIds: evidence?.excused,
   };
 }
 
@@ -140,13 +141,14 @@ export async function loadQuizEvidence(
         return [...byId.values()];
       })
       .catch(() => undefined);
-    // Excusals are optional evidence: a failed read (e.g. rules without the
-    // collection yet) counts none, as the web does, rather than hiding the forecast.
+    // A failed read is UNKNOWN, not "none excused": counting none would turn an
+    // excused quiz into missed work. missedQuizCountsIfKnown then withholds the
+    // missing-work rate wherever an excusal could have mattered.
     const excused = await getDocs(
       query(collection(db, 'classes', classId, 'quiz_excusals'), where('student_id', '==', studentId))
     )
       .then((snap: any) => new Set<string>(docsOf(snap).filter((r: any) => r.excused).map((r: any) => r.quiz_id)))
-      .catch(() => new Set<string>());
+      .catch(() => undefined);
     return [classId, { quizzes, excused }] as const;
   });
   const [attempts, classes] = await Promise.all([attemptsP, Promise.all(perClass)]);

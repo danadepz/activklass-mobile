@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import { predictRisk, riskReasons, READABLE_FEATURE, RiskResult } from '../lib/risk';
 import {
   attendanceTrendFromLog,
-  missedQuizCounts,
+  missedQuizCountsIfKnown,
   missingRate,
   missingWorkCountsFromEntry,
   quizDueDates,
@@ -20,8 +20,10 @@ interface ClassStandingForecastProps {
   assessments?: any[];
   quizzes?: any[];
   attemptedQuizIds?: Set<string>;
-  /** The student's officially excused quizzes in this class (A4); null = none known. */
-  excusedQuizIds?: Set<string> | null;
+  /** The student's officially excused quizzes in this class (A4). undefined =
+   *  unknown (read failed or not loaded), which withholds the missing-work rate
+   *  whenever a closed quiz was expected; an empty Set = known none. */
+  excusedQuizIds?: Set<string>;
   /** Which class this forecast is for, when several are shown together. */
   label?: string;
 }
@@ -44,18 +46,19 @@ export default function ClassStandingForecast({
   const [loading, setLoading] = useState<boolean>(Boolean(studentId));
   const [error, setError] = useState(false);
 
-  const indicators = useMemo(
-    () => ({
+  const indicators = useMemo(() => {
+    // undefined when the quiz half is unknown (a failed read): the missing-work
+    // rate is then withheld, never "nothing missed" or "everything missed".
+    const quizWork = missedQuizCountsIfKnown(quizzes, attemptedQuizIds, studentId ?? '', excusedQuizIds);
+    return {
       attendanceRate: attendanceRate ?? undefined,
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
       attendanceTrend: attendanceTrendFromLog(attendanceLog),
       quizTrend: quizTrendFromAttempts(attempts, quizDueDates(quizzes as any, assessments as any)),
-      missingWorkRate: missingRate(
-        missingWorkCountsFromEntry(assessments),
-        missedQuizCounts(quizzes, attemptedQuizIds, studentId ?? '', undefined, excusedQuizIds ?? null)
-      ),
-    }),
+      missingWorkRate: quizWork ? missingRate(missingWorkCountsFromEntry(assessments), quizWork) : undefined,
+    };
+  },
     [
       attendanceRate,
       grade,

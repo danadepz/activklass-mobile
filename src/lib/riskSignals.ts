@@ -179,6 +179,27 @@ export function missedQuizCounts(
 }
 
 /**
+ * missedQuizCounts, but only when every input behind it is KNOWN; undefined
+ * otherwise, so the missing-work rate is withheld (insufficient data) instead
+ * of being built on a guess. Unknown quizzes would read as "nothing expected",
+ * unknown attempts as "every closed quiz missed", unknown excusals as "none
+ * excused". `undefined` means unknown; an empty Set means known-none.
+ * Unknown excusals are harmless only when no quiz was expected at all, since
+ * an excusal can only take an expected quiz away.
+ */
+export function missedQuizCountsIfKnown(
+  quizzes: any[] | undefined,
+  attemptedQuizIds: Set<string> | undefined,
+  studentId: string,
+  excusedQuizIds: Set<string> | undefined,
+  now: number = Date.now()
+): WorkCounts | undefined {
+  if (!quizzes || !attemptedQuizIds) return undefined;
+  const counts = missedQuizCounts(quizzes, attemptedQuizIds, studentId, now, excusedQuizIds ?? null);
+  return excusedQuizIds === undefined && counts.expected > 0 ? undefined : counts;
+}
+
+/**
  * Pool any number of {notDone, expected} counts into one 0-1 rate.
  * undefined when nothing was expected of the student yet.
  */

@@ -14,7 +14,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('../config/firebase', () => ({ db: {} }))
 
 const { forecastInputsFor, loadQuizEvidence, withQuizLinks, visibleQuizzesFor } = await import('./studentForecast')
-const { quizDueDates, quizTrendFromAttempts, missedQuizCounts } = await import('./riskSignals')
+const { quizDueDates, quizTrendFromAttempts, missedQuizCounts, missedQuizCountsIfKnown, missingRate, missingWorkCountsFromEntry } = await import('./riskSignals')
 
 const ME = 'me'
 const att = (quiz_id: string, total_score: number | null, extra: any = {}) =>
@@ -179,7 +179,7 @@ describe('loadQuizEvidence reads only what this student may read', () => {
     expect([...(ev.c1.excused ?? [])]).toEqual(['q1'])
   })
 
-  it('10. a refused or failed read leaves that evidence unknown; a refused excusal read counts none', async () => {
+  it('10. a refused or failed read leaves that evidence unknown -- excusals included', async () => {
     const denied = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })
     getDocs.mockImplementation(async (q: any) => {
       if (q.path === 'quiz_attempts') throw denied
@@ -190,9 +190,60 @@ describe('loadQuizEvidence reads only what this student may read', () => {
     const ev = await loadQuizEvidence(['c1'], ME)
     expect(ev.c1.attempts).toBeUndefined()
     expect(ev.c1.quizzes).toBeUndefined()
-    expect(ev.c1.excused?.size).toBe(0)
+    expect(ev.c1.excused).toBeUndefined() // unknown, not "none excused"
     const f = forecastInputsFor({ classId: 'c1', studentId: ME, entry: entry(), attendance: attendance(['present']), evidence: ev.c1 })
     expect(f.quizAverage).toBeNull()
     expect(trendOf(f)).toBeUndefined()
+  })
+})
+
+/**
+ * Task 2 (2026-11-23): a failed read must never be scored as confirmed evidence.
+ * The missing-work rate the forecast sends is the one built here.
+ */
+describe('missing work is withheld when the quiz half is unknown', () => {
+  const closed = [quiz('q1', null), quiz('q2', null)] // both closed, assigned to everyone
+  const rateFor = (f: any) => {
+    const quizWork = missedQuizCountsIfKnown(f.quizzes, f.attemptedQuizIds, ME, f.excusedQuizIds)
+    return quizWork ? missingRate(missingWorkCountsFromEntry(f.assessments), quizWork) : undefined
+  }
+
+  it('excusals unknown + a closed quiz expected -> no rate (not an excused quiz counted as missed)', () => {
+    const f = build({ quizzes: closed, attempts: [att('q1', 9)], excused: undefined })
+    expect(f.excusedQuizIds).toBeUndefined()
+    expect(rateFor(f)).toBeUndefined()
+    // The same student with the excusal known: q2 excused, nothing missed.
+    expect(rateFor(build({ quizzes: closed, attempts: [att('q1', 9)], excused: new Set(['q2']) }))).toBe(0)
+    // Known none excused: q2 really is missed.
+    expect(rateFor(build({ quizzes: closed, attempts: [att('q1', 9)], excused: new Set() }))).toBe(0.5)
+  })
+
+  it('excusals unknown but no quiz expected -> the rate stands (an excusal could change nothing)', () => {
+    const e = entry([{ id: 'w1', title: 'W1', status: 'missing' }, { id: 'w2', title: 'W2', status: 'graded' }])
+    expect(rateFor(build({ quizzes: [quiz('o', null, { status: 'published', closes_at: '2999-01-01T00:00' })], attempts: [], excused: undefined }, e))).toBe(0.5)
+  })
+
+  it('attempts unknown -> no rate (not every closed quiz counted as missed)', () => {
+    const f = build({ quizzes: closed, attempts: undefined, excused: new Set() })
+    expect(missedQuizCounts(f.quizzes, f.attemptedQuizIds, ME)).toEqual({ notDone: 2, expected: 2 }) // the old trap
+    expect(rateFor(f)).toBeUndefined()
+  })
+
+  it('quizzes unknown -> no rate (not "no quiz was ever due")', () => {
+    const e = entry([{ id: 'w1', title: 'W1', status: 'graded' }])
+    expect(rateFor(build({ quizzes: undefined, attempts: [], excused: new Set() }, e))).toBeUndefined()
+  })
+
+  it('the loader end to end: a refused excusal read withholds the rate instead of flagging the quiz', async () => {
+    const denied = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })
+    const snap = (rows: any[]) => ({ docs: rows.map(({ id, ...d }) => ({ id, data: () => d })) })
+    getDocs.mockReset()
+    getDocs.mockImplementation(async (q: any) => {
+      if (q.path === 'quiz_attempts') return snap([{ id: 'a1', quiz_id: 'q1', class_id: 'c1', student_id: ME, total_score: 9, total_possible: 10 }])
+      if (q.path === 'quizzes') return snap([{ id: 'q1', status: 'closed' }, { id: 'q2', status: 'closed' }])
+      throw denied
+    })
+    const ev = await loadQuizEvidence(['c1'], ME)
+    expect(rateFor(forecastInputsFor({ classId: 'c1', studentId: ME, entry: entry(), attendance: null, evidence: ev.c1 }))).toBeUndefined()
   })
 })
