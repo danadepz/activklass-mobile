@@ -85,6 +85,21 @@ describe('trends', () => {
     ]
     expect(quizTrendFromAttempts(attempts)).toBe(-40)
   })
+  it('trends distinct quizzes, so retakes of one quiz cannot make a trend', () => {
+    const retakes = [
+      { quiz_id: 'q1', total_score: 9, total_possible: 10, submitted_at: '2026-03-01' },
+      { quiz_id: 'q1', total_score: 5, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'q1', total_score: 2, total_possible: 10, submitted_at: '2026-03-03' },
+    ]
+    expect(quizTrendFromAttempts(retakes)).toBeUndefined()
+    const distinct = [
+      { quiz_id: 'q3', total_score: 4, total_possible: 10, submitted_at: '2026-03-09' },
+      { quiz_id: 'q1', total_score: 9, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'q2', total_score: 8, total_possible: 10, submitted_at: '2026-03-05' },
+      { quiz_id: 'q1', total_score: 10, total_possible: 10, submitted_at: '2026-03-10' },
+    ]
+    expect(quizTrendFromAttempts(distinct)).toBe(-50)
+  })
 })
 
 describe('work not done', () => {

@@ -59,23 +59,36 @@ export function attendanceTrendFromLog(log: AttendanceRecord[] | undefined): num
 }
 
 export interface ScoredAttempt {
+  quiz_id?: string | null;
   total_score?: number | null;
   total_possible?: number | null;
   submitted_at?: any;
 }
 
 /**
- * Quiz trend in percentage points from attempts carrying `submitted_at`.
- * Walks attempts in submission order, unlike the quiz *average*, which stays
- * best-per-student; a student whose scores are falling still has their one
- * good early attempt sitting in the maximum.
+ * Quiz trend in percentage points across DISTINCT graded quizzes: each quiz's
+ * best scored attempt, ordered by its first scored submission. Mirrors the
+ * web's distinctQuizScores/quizTrendFromAttempts (2026-11-22) -- a retake is
+ * another try at one activity, not another activity, so retakes no longer
+ * manufacture a trend. Legacy attempts without quiz_id stay separate.
  */
 export function quizTrendFromAttempts(attempts: ScoredAttempt[] | undefined): number | undefined {
-  const scored = (attempts ?? [])
-    .filter((a) => a?.total_score != null && a?.total_possible)
-    .map((a) => ({ pct: (a.total_score! / a.total_possible!) * 100, at: sortKey(a.submitted_at) }))
-    .sort((x, y) => x.at.localeCompare(y.at));
-  return splitTrend(scored.map((a) => a.pct), MIN_ATTEMPTS);
+  const byQuiz = new Map<string, { best: number; first: string }>();
+  let anon = 0;
+  for (const a of attempts ?? []) {
+    if (a?.total_score == null || !a?.total_possible) continue;
+    const pct = (a.total_score / a.total_possible) * 100;
+    const at = sortKey(a.submitted_at);
+    const key = a.quiz_id ?? `__no_quiz_id_${anon++}`;
+    const cur = byQuiz.get(key);
+    if (!cur) byQuiz.set(key, { best: pct, first: at });
+    else {
+      cur.best = Math.max(cur.best, pct);
+      if (at < cur.first) cur.first = at;
+    }
+  }
+  const ordered = [...byQuiz.values()].sort((x, y) => x.first.localeCompare(y.first));
+  return splitTrend(ordered.map((q) => q.best), MIN_ATTEMPTS);
 }
 
 export interface WorkCounts {
