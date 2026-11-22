@@ -6,6 +6,7 @@ import {
   missedQuizCounts,
   missingRate,
   missingWorkCountsFromEntry,
+  quizDueDates,
   quizTrendFromAttempts,
 } from '../lib/riskSignals';
 
@@ -42,7 +43,7 @@ export default function ClassStandingForecast({
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
       attendanceTrend: attendanceTrendFromLog(attendanceLog),
-      quizTrend: quizTrendFromAttempts(attempts),
+      quizTrend: quizTrendFromAttempts(attempts, quizDueDates(quizzes as any, assessments as any)),
       missingWorkRate: missingRate(
         missingWorkCountsFromEntry(assessments),
         missedQuizCounts(quizzes, attemptedQuizIds, studentId ?? '')

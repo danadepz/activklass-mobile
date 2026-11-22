@@ -11,6 +11,7 @@ import {
   missingRate,
   missingWorkCountsFromEntry,
   quizAverageOf,
+  quizDueDates,
   quizTrendFromAttempts,
   splitTrend,
 } from './riskSignals'
@@ -77,13 +78,22 @@ describe('trends', () => {
     expect(attendanceTrendFromLog(log)).toBeUndefined()
   })
 
-  it('walks quiz attempts in submission order, not by best', () => {
+  it('walks quizzes in due-date order, not submission order (A3)', () => {
     const attempts = [
-      { total_score: 5, total_possible: 10, submitted_at: '2026-03-03' },
-      { total_score: 9, total_possible: 10, submitted_at: '2026-03-01' },
-      { total_score: 9, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'qc', total_score: 5, total_possible: 10, submitted_at: '2026-03-01' },
+      { quiz_id: 'qa', total_score: 9, total_possible: 10, submitted_at: '2026-03-09' },
+      { quiz_id: 'qb', total_score: 9, total_possible: 10, submitted_at: '2026-03-05' },
     ]
-    expect(quizTrendFromAttempts(attempts)).toBe(-40)
+    const due = { qa: '2026-03-01', qb: '2026-03-02', qc: '2026-03-03' }
+    expect(quizTrendFromAttempts(attempts, due)).toBe(-40)
+    // Without authoritative dates there is no trend -- none is invented.
+    expect(quizTrendFromAttempts(attempts)).toBeUndefined()
+  })
+  it('dates a quiz by its due date, else its record column, else not at all', () => {
+    expect(quizDueDates(
+      [{ id: 'a', closes_at: '2026-11-03T17:00' }, { id: 'b' }, { id: 'c' }],
+      [{ source_quiz_id: 'b', date_given: '2026-11-04' }],
+    )).toEqual({ a: '2026-11-03', b: '2026-11-04' })
   })
   it('trends distinct quizzes, so retakes of one quiz cannot make a trend', () => {
     const retakes = [
@@ -98,7 +108,7 @@ describe('trends', () => {
       { quiz_id: 'q2', total_score: 8, total_possible: 10, submitted_at: '2026-03-05' },
       { quiz_id: 'q1', total_score: 10, total_possible: 10, submitted_at: '2026-03-10' },
     ]
-    expect(quizTrendFromAttempts(distinct)).toBe(-50)
+    expect(quizTrendFromAttempts(distinct, { q1: '2026-03-02', q2: '2026-03-05', q3: '2026-03-09' })).toBe(-50)
   })
 })
 

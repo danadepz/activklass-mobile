@@ -65,29 +65,52 @@ export interface ScoredAttempt {
   submitted_at?: any;
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
+
+/**
+ * Each quiz's authoritative date, 'YYYY-MM-DD': its due date (`closes_at`),
+ * else its class-record column's `date_given` (`source_quiz_id`). A quiz with
+ * neither is left out -- no date is invented. Mirrors the web's quizDueDates.
+ */
+export function quizDueDates(
+  quizzes: { id?: string; closes_at?: string | null }[] | undefined,
+  assessments?: { source_quiz_id?: string | null; date_given?: string | null }[] | undefined
+): Record<string, string> {
+  const recordDate: Record<string, string> = {};
+  for (const a of assessments ?? []) {
+    if (a?.source_quiz_id && ISO_DAY.test(a?.date_given ?? '')) recordDate[a.source_quiz_id] = (a.date_given as string).slice(0, 10);
+  }
+  const out: Record<string, string> = {};
+  for (const q of quizzes ?? []) {
+    const due = ISO_DAY.test(q?.closes_at ?? '') ? (q.closes_at as string).slice(0, 10) : null;
+    const date = due ?? (q?.id ? recordDate[q.id] : undefined) ?? null;
+    if (q?.id && date) out[q.id] = date;
+  }
+  return out;
+}
+
 /**
  * Quiz trend in percentage points across DISTINCT graded quizzes: each quiz's
- * best scored attempt, ordered by its first scored submission. Mirrors the
- * web's distinctQuizScores/quizTrendFromAttempts (2026-11-22) -- a retake is
- * another try at one activity, not another activity, so retakes no longer
- * manufacture a trend. Legacy attempts without quiz_id stay separate.
+ * best scored attempt, ordered by the quiz's AUTHORITATIVE date (policy A3,
+ * 2026-11-22) from `quizDates`. A quiz without one takes no part -- fewer than
+ * MIN_ATTEMPTS dated quizzes gives undefined, never a trend in submission
+ * order. Mirrors the web's quizTrendFromAttempts; retakes fold into one quiz.
  */
-export function quizTrendFromAttempts(attempts: ScoredAttempt[] | undefined): number | undefined {
-  const byQuiz = new Map<string, { best: number; first: string }>();
-  let anon = 0;
+export function quizTrendFromAttempts(
+  attempts: ScoredAttempt[] | undefined,
+  quizDates: Record<string, string> = {}
+): number | undefined {
+  const byQuiz = new Map<string, { best: number; date: string | null; id: string }>();
   for (const a of attempts ?? []) {
-    if (a?.total_score == null || !a?.total_possible) continue;
+    if (a?.total_score == null || !a?.total_possible || !a?.quiz_id) continue;
     const pct = (a.total_score / a.total_possible) * 100;
-    const at = sortKey(a.submitted_at);
-    const key = a.quiz_id ?? `__no_quiz_id_${anon++}`;
-    const cur = byQuiz.get(key);
-    if (!cur) byQuiz.set(key, { best: pct, first: at });
-    else {
-      cur.best = Math.max(cur.best, pct);
-      if (at < cur.first) cur.first = at;
-    }
+    const cur = byQuiz.get(a.quiz_id);
+    if (!cur) byQuiz.set(a.quiz_id, { best: pct, date: quizDates[a.quiz_id] ?? null, id: a.quiz_id });
+    else cur.best = Math.max(cur.best, pct);
   }
-  const ordered = [...byQuiz.values()].sort((x, y) => x.first.localeCompare(y.first));
+  const ordered = [...byQuiz.values()]
+    .filter((q) => q.date)
+    .sort((x, y) => `${x.date}|${x.id}`.localeCompare(`${y.date}|${y.id}`));
   return splitTrend(ordered.map((q) => q.best), MIN_ATTEMPTS);
 }
 
