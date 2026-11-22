@@ -20,6 +20,10 @@ interface ClassStandingForecastProps {
   assessments?: any[];
   quizzes?: any[];
   attemptedQuizIds?: Set<string>;
+  /** The student's officially excused quizzes in this class (A4); null = none known. */
+  excusedQuizIds?: Set<string> | null;
+  /** Which class this forecast is for, when several are shown together. */
+  label?: string;
 }
 
 export default function ClassStandingForecast({
@@ -32,7 +36,10 @@ export default function ClassStandingForecast({
   assessments,
   quizzes,
   attemptedQuizIds,
+  excusedQuizIds,
+  label,
 }: ClassStandingForecastProps) {
+  const heading = label ? `Projected Standing · ${label}` : 'Projected Standing';
   const [data, setData] = useState<RiskResult | null>(null);
   const [loading, setLoading] = useState<boolean>(Boolean(studentId));
   const [error, setError] = useState(false);
@@ -46,7 +53,7 @@ export default function ClassStandingForecast({
       quizTrend: quizTrendFromAttempts(attempts, quizDueDates(quizzes as any, assessments as any)),
       missingWorkRate: missingRate(
         missingWorkCountsFromEntry(assessments),
-        missedQuizCounts(quizzes, attemptedQuizIds, studentId ?? '')
+        missedQuizCounts(quizzes, attemptedQuizIds, studentId ?? '', undefined, excusedQuizIds ?? null)
       ),
     }),
     [
@@ -58,6 +65,7 @@ export default function ClassStandingForecast({
       assessments,
       quizzes,
       attemptedQuizIds,
+      excusedQuizIds,
       studentId,
     ]
   );
@@ -96,7 +104,7 @@ export default function ClassStandingForecast({
   if (loading) {
     return (
       <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
-        <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+        <Text className="text-ink font-bold text-sm">{heading}</Text>
         <View className="flex-row items-center gap-2 mt-2">
           <ActivityIndicator size="small" color="#6366f1" />
           <Text className="text-ink-faint text-xs">Computing projection…</Text>
@@ -111,7 +119,7 @@ export default function ClassStandingForecast({
     const missing = (data.missing ?? []).map((feature) => READABLE_FEATURE[feature] ?? feature);
     return (
       <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
-        <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+        <Text className="text-ink font-bold text-sm">{heading}</Text>
         <Text accessibilityRole="text" className="text-ink-muted text-xs mt-2 leading-relaxed">
           Not enough recorded academic information to estimate risk yet. This projection needs all six indicators.
           {missing.length ? ` Still needed: ${missing.join(', ')}.` : ''}
@@ -126,7 +134,7 @@ export default function ClassStandingForecast({
   if (data.status === 'model_unavailable') {
     return (
       <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
-        <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+        <Text className="text-ink font-bold text-sm">{heading}</Text>
         <Text className="text-ink-muted text-xs mt-2">The prediction service is unavailable right now.</Text>
       </View>
     );
@@ -139,7 +147,7 @@ export default function ClassStandingForecast({
 
   return (
     <View className="bg-surface border border-hairline rounded-2xl p-4 my-2">
-      <Text className="text-ink font-bold text-sm">Projected Standing</Text>
+      <Text className="text-ink font-bold text-sm">{heading}</Text>
       <Text className="text-ink-muted text-xs mt-1 leading-relaxed">
         A projection, not a grade. It looks at where your attendance and scores are heading, so it
         can change well before your grade does.

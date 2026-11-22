@@ -162,13 +162,16 @@ export function missedQuizCounts(
   quizzes: any[] | undefined,
   attemptedQuizIds: Set<string> | undefined,
   studentId: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  excusedQuizIds: Set<string> | null = null
 ): WorkCounts {
   const attempted = attemptedQuizIds ?? new Set<string>();
   let expected = 0;
   let notDone = 0;
   for (const quiz of quizzes ?? []) {
     if (!assignedTo(quiz, studentId) || !windowClosed(quiz, now)) continue;
+    // A4: an officially excused quiz leaves numerator AND denominator (web parity).
+    if (excusedQuizIds?.has(quiz.id)) continue;
     expected += 1;
     if (!attempted.has(quiz.id)) notDone += 1;
   }

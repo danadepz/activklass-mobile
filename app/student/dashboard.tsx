@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -20,6 +20,7 @@ import {
 } from '../../src/lib/guardianCodes';
 import { useThemeColors } from '../../src/theme';
 import ClassStandingForecast from '../../src/components/ClassStandingForecast';
+import { ForecastInputs, forecastInputsFor, loadQuizEvidence } from '../../src/lib/studentForecast';
 import { Ionicons } from '@expo/vector-icons';
 
 // Interface for classes data structure in dashboard
@@ -52,6 +53,14 @@ export default function StudentDashboard() {
      rendered as such rather than as a zero. */
   const [overallGrade, setOverallGrade] = useState<number | null>(null);
   const [attendanceRate, setAttendanceRate] = useState<number | null>(null);
+  /* One forecast per class, each from that class's own grade, attendance and
+     quiz evidence -- never pooled across classes (the model's inputs are per
+     class). null while loading, so no forecast is requested on half the
+     evidence. */
+  const [forecasts, setForecasts] = useState<ForecastInputs[] | null>(null);
+  // A class snapshot can fire again before the previous load finishes; only
+  // the newest load may write state.
+  const loadSeq = useRef(0);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -84,14 +93,30 @@ export default function StudentDashboard() {
       // Grades and attendance come from the same documents the web reads, so
       // the two cannot show a student different numbers.
       const uid = profile?.id;
+      const seq = ++loadSeq.current;
       if (uid && classList.length) {
-        const standing = await loadOverallStanding(classList.map((c) => c.id), uid);
+        const classIds = classList.map((c) => c.id);
+        const [standing, quizEvidence] = await Promise.all([
+          loadOverallStanding(classIds, uid),
+          loadQuizEvidence(classIds, uid),
+        ]);
+        if (seq !== loadSeq.current) return;
         setOverallGrade(standing.average);
         setAttendanceRate(standing.attendanceRate);
+        setForecasts(classIds.map((classId, i) => forecastInputsFor({
+          classId,
+          studentId: uid,
+          entry: standing.entries.find((e) => e.class_id === classId) ?? null,
+          attendance: standing.attendance[i] ?? null,
+          evidence: quizEvidence[classId] ?? null,
+        })));
+      } else if (seq === loadSeq.current) {
+        setForecasts([]);
       }
       setLoading(false);
     }, (err) => {
       console.error('Error listening to classes:', err);
+      setForecasts([]);
       setLoading(false);
     });
 
@@ -260,12 +285,26 @@ export default function StudentDashboard() {
         {/* Projected Academic Standing (Early-Warning Model) */}
         {profile?.id && (
           <View key="projected-standing-wrapper" className="mt-4">
-            <ClassStandingForecast
-              key={profile.id}
-              studentId={profile.id}
-              grade={overallGrade}
-              attendanceRate={attendanceRate}
-            />
+            {forecasts == null ? (
+              <Text className="text-ink-faint text-xs">Loading your class evidence…</Text>
+            ) : (
+              forecasts.map((f) => (
+                <ClassStandingForecast
+                  key={`${profile.id}-${f.classId}`}
+                  label={classes.find((cl) => cl.id === f.classId)?.subject}
+                  studentId={f.studentId}
+                  grade={f.grade}
+                  attendanceRate={f.attendanceRate}
+                  quizAverage={f.quizAverage}
+                  attendanceLog={f.attendanceLog}
+                  attempts={f.attempts}
+                  quizzes={f.quizzes}
+                  assessments={f.assessments}
+                  attemptedQuizIds={f.attemptedQuizIds}
+                  excusedQuizIds={f.excusedQuizIds}
+                />
+              ))
+            )}
           </View>
         )}
 
