@@ -33,6 +33,9 @@ interface ClassItem {
   grade_level?: string | null;
 }
 
+/** Minimum gap between focus refreshes of the forecast evidence. */
+const FOCUS_REFRESH_MS = 30_000;
+
 export default function StudentDashboard() {
   useRequireAuth();
   const c = useThemeColors();
@@ -61,6 +64,37 @@ export default function StudentDashboard() {
   // A class snapshot can fire again before the previous load finishes; only
   // the newest load may write state.
   const loadSeq = useRef(0);
+  // The enrolled class ids from the last snapshot, and when evidence was last
+  // read -- what the focus refresh below needs.
+  const classIdsRef = useRef<string[] | null>(null);
+  const lastLoadAt = useRef(0);
+
+  /* Grades, attendance and quiz evidence for these classes, one-shot reads.
+     Grades and attendance come from the same documents the web reads, so the
+     two cannot show a student different numbers. */
+  const loadStanding = useCallback(async (classIds: string[]) => {
+    const uid = profile?.id;
+    const seq = ++loadSeq.current;
+    lastLoadAt.current = Date.now();
+    if (!uid || !classIds.length) {
+      setForecasts([]);
+      return;
+    }
+    const [standing, quizEvidence] = await Promise.all([
+      loadOverallStanding(classIds, uid),
+      loadQuizEvidence(classIds, uid),
+    ]);
+    if (seq !== loadSeq.current) return;
+    setOverallGrade(standing.average);
+    setAttendanceRate(standing.attendanceRate);
+    setForecasts(classIds.map((classId, i) => forecastInputsFor({
+      classId,
+      studentId: uid,
+      entry: standing.entries.find((e) => e.class_id === classId) ?? null,
+      attendance: standing.attendance[i] ?? null,
+      evidence: quizEvidence[classId] ?? null,
+    })));
+  }, [profile?.id]);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -89,30 +123,8 @@ export default function StudentDashboard() {
         });
       }
       setClasses(classList);
-
-      // Grades and attendance come from the same documents the web reads, so
-      // the two cannot show a student different numbers.
-      const uid = profile?.id;
-      const seq = ++loadSeq.current;
-      if (uid && classList.length) {
-        const classIds = classList.map((c) => c.id);
-        const [standing, quizEvidence] = await Promise.all([
-          loadOverallStanding(classIds, uid),
-          loadQuizEvidence(classIds, uid),
-        ]);
-        if (seq !== loadSeq.current) return;
-        setOverallGrade(standing.average);
-        setAttendanceRate(standing.attendanceRate);
-        setForecasts(classIds.map((classId, i) => forecastInputsFor({
-          classId,
-          studentId: uid,
-          entry: standing.entries.find((e) => e.class_id === classId) ?? null,
-          attendance: standing.attendance[i] ?? null,
-          evidence: quizEvidence[classId] ?? null,
-        })));
-      } else if (seq === loadSeq.current) {
-        setForecasts([]);
-      }
+      classIdsRef.current = classList.map((c) => c.id);
+      await loadStanding(classIdsRef.current);
       setLoading(false);
     }, (err) => {
       console.error('Error listening to classes:', err);
@@ -134,7 +146,23 @@ export default function StudentDashboard() {
       unsubscribeClasses();
       unsubscribeRemediations();
     };
-  }, [profile]);
+  }, [profile, loadStanding]);
+
+  /* Re-read the evidence when the student comes back to this tab -- after
+     sitting a quiz, or later once a teacher has graded -- instead of holding
+     a snapshot until the app restarts. One-shot reads, no new listener.
+     shortcut: refreshes on focus at most every 30 s, so a return within 30 s
+     of the last load shows the earlier figures; a listener on quiz_attempts and
+     the entry would be the upgrade if that ever matters. The first focus is
+     skipped by the null check: the class snapshot does the first load. */
+  useFocusEffect(
+    useCallback(() => {
+      const ids = classIdsRef.current;
+      if (ids && Date.now() - lastLoadAt.current > FOCUS_REFRESH_MS) {
+        loadStanding(ids).catch((e) => console.error('[StudentDashboard] refresh:', e));
+      }
+    }, [loadStanding])
+  );
 
   /* Live, so the badge clears the moment the notifications screen marks one
      read rather than waiting for this screen to be refocused. */
