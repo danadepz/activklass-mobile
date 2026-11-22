@@ -196,7 +196,8 @@ export function missingRate(...counts: (WorkCounts | null | undefined)[]): numbe
 /**
  * Best percentage per quiz, averaged — one input to the standing forecast.
  * Best rather than latest, matching how the teacher's mastery figures read
- * attempts. Mirrors the inline computation on the web's class page.
+ * attempts. Unrounded, as the web's quizAverageFromAttempts: the model gets
+ * the exact mean and display rounds on its own (risk.ts READABLE text).
  */
 export function quizAverageOf(attemptsByQuiz: Record<string, ScoredAttempt[]>): number | null {
   const bests = Object.values(attemptsByQuiz)
@@ -206,5 +207,5 @@ export function quizAverageOf(attemptsByQuiz: Record<string, ScoredAttempt[]>): 
       return Math.max(...scored.map((a) => (a.total_score! / a.total_possible!) * 100));
     })
     .filter((v): v is number => v != null);
-  return bests.length ? Math.round(bests.reduce((s, v) => s + v, 0) / bests.length) : null;
+  return bests.length ? bests.reduce((s, v) => s + v, 0) / bests.length : null;
 }

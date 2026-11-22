@@ -202,6 +202,32 @@ describe('work not done', () => {
     })).toBe(70)
     expect(quizAverageOf({})).toBeNull()
   })
+
+  // Owner decision 2026-11-23: the unrounded mean of the best scored attempt per
+  // distinct quiz, on web and mobile alike. Expected values were produced by the
+  // web's quizAverageFromAttempts (2a4dee8) on the same attempts.
+  describe('unrounded quiz average (web parity)', () => {
+    const q = (...scores: (number | null)[]) => scores.map((s) => ({ total_score: s, total_possible: 100 }))
+    it('keeps the fraction', () => {
+      expect(quizAverageOf({ a: q(81), b: q(82) })).toBe(81.5)
+      expect(quizAverageOf({ a: q(75), b: q(80), c: q(90) })).toBeCloseTo(245 / 3, 12)
+      expect(quizAverageOf({ a: q(75), b: q(80), c: q(90) })).not.toBe(82)
+      expect(quizAverageOf({ a: q(0), b: q(85) })).toBe(42.5)
+    })
+    it('best attempt per quiz, zeros kept, ungraded ignored, nothing scored is unknown', () => {
+      expect(quizAverageOf({ a: q(40, 81, 60), b: q(82) })).toBe(81.5)
+      expect(quizAverageOf({ a: q(0, 0), b: q(85) })).toBe(42.5)
+      expect(quizAverageOf({ a: q(null, 81), b: q(82), c: q(null) })).toBe(81.5)
+      expect(quizAverageOf({ a: [{ total_score: 9, total_possible: 0 }], b: q(null) })).toBeNull()
+      expect(quizAverageOf({})).toBeNull()
+    })
+    it('reaches the prediction request unrounded', async () => {
+      vi.mocked(api).mockResolvedValue({ status: 'insufficient_data', missing: [], supplied: ['quiz_average'] })
+      await predictRisk({ quizAverage: quizAverageOf({ a: q(75), b: q(80), c: q(90) }) })
+      const body = vi.mocked(api).mock.calls.at(-1)?.[1] as any
+      expect(JSON.stringify(body)).toContain('"quiz_average":81.66666666666667')
+    })
+  })
 })
 
 describe('indicators', () => {

@@ -50,13 +50,13 @@ describe('forecast inputs for one class', () => {
   it('3. several attempts at one quiz count once, at their best', () => {
     const f = build({ quizzes, attempts: [att('q1', 2), att('q1', 8), att('q2', 8), att('q3', 3), att('q3', 1)] })
     expect(trendOf(f)).toBe(-50)
-    expect(f.quizAverage).toBe(63) // mean(80, 80, 30)
+    expect(f.quizAverage).toBeCloseTo(190 / 3, 10) // mean(80, 80, 30), unrounded
   })
 
   it('4. a scored zero is a real result', () => {
     const f = build({ quizzes, attempts: [att('q1', 10), att('q2', 10), att('q3', 0)] })
     expect(trendOf(f)).toBe(-100)
-    expect(f.quizAverage).toBe(67)
+    expect(f.quizAverage).toBeCloseTo(200 / 3, 10)
   })
 
   it('5. ungraded and in-progress attempts are no score (but do count as attempted)', () => {
@@ -97,7 +97,7 @@ describe('forecast inputs for one class', () => {
       ],
     })
     expect(f.attempts?.length).toBe(3)
-    expect(f.quizAverage).toBe(63)
+    expect(f.quizAverage).toBeCloseTo(190 / 3, 10)
     expect(trendOf(f)).toBe(-80)
   })
 
