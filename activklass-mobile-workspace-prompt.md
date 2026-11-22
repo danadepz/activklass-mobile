@@ -6,7 +6,7 @@ Mobile is the **student** and **parent (guardian)** client only. Teachers, admin
 
 ## Shared rules you must keep (they are enforced by `firestore.rules` in `activklass-backend`)
 
-- Firestore is the system of record. Read it directly. Flask (`src/lib/api.ts`) is only for what needs the Admin SDK or a model: risk prediction, AI generation, account provisioning.
+- Firebase Cloud Firestore is the primary application database; Firebase Authentication handles identity and Firebase Admin SDK handles trusted server-side Firebase operations. Mobile also makes selected Flask calls for initial password changes, quiz attempt workflows, and risk prediction. Verify executable callers before changing routes.
 - A student may read **only** `gradebooks/{classId}/entries/{studentId}` for grades. It is derived by the teacher's client; never compute or write grades on mobile.
 - Quiz attempts are created at **Start** (`status: 'in_progress'`) and updated on submit with `submitted_at`, `total_score`, `per_question[]`, `attempt_number`. Count attempts with `finishedAttempts()`. The score field is **`total_score`**, never `score` (mobile once wrote `score` and every teacher view silently dropped those attempts).
 - `src/lib/quizPool.ts`, `src/lib/quizFeedback.ts` and `src/lib/quizAttempts.ts` are TypeScript ports of the web's `src/lib/quizPool.js`, `quizFeedback.js`, `quizAttempts.js`. The web's `portParity.test.js` imports both sides and fails if they drift. Edit one, edit the other. Never fix a parity failure by editing the test.

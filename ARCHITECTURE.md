@@ -10,7 +10,7 @@ Mobile app ───── Firebase Authentication / Firestore / Storage
 Web app ─────── Firebase services and selected Flask API routes
 ```
 
-Firestore remains the system of record. Direct Firebase access is authorized by rules in `activklass-backend`. The diagram describes source behavior and does not assert service deployment state.
+Firebase Cloud Firestore is the primary application database; Firebase Authentication handles identity and backend trusted operations use Firebase Admin SDK. Direct client access is authorized by rules in `activklass-backend`. The diagram describes source behavior and does not assert service deployment state. Some existing Flask routes use auxiliary SQLAlchemy/SQLite persistence; this does not change Firestore primary status, and PostgreSQL/Neon are not used.
 
 ## App layers
 

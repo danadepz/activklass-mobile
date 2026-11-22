@@ -2,6 +2,8 @@
 
 ## Identity and transport
 
+Firebase Cloud Firestore is the primary application database. Firebase Authentication handles identity, and backend trusted Firebase operations use Firebase Admin SDK. Existing Flask routes may use auxiliary SQLAlchemy/SQLite persistence; PostgreSQL and Neon are not used by the project.
+
 - Firebase Authentication provides user identity.
 - Direct Firestore/Storage calls use the Firebase client SDK and backend-owned `firestore.rules` / `storage.rules`.
 - Flask calls go through `src/lib/api.ts`, use `EXPO_PUBLIC_API_URL`, and attach `Authorization: Bearer <Firebase ID token>`.
