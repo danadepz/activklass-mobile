@@ -3,11 +3,7 @@
 **Current correction:** Current mobile source includes selected Flask API calls, and its APK distribution evidence does not imply iOS distribution. Treat contradictory dated notes in CLAUDE.md and older shared docs as stale; confirm behavior in current code/configuration before changes.
 # AGENTS.md — ActivKlass (mobile)
 
-**Read `CLAUDE.md` in this folder first.** It is the real instruction file for this repo —
-the lanes, what each pane may edit, the git rules, the project's shape — and it is the one
-that gets kept up to date. This file exists only because Codex does not read `CLAUDE.md`
-on its own. It is a pointer plus the desk rules that are written down nowhere else; it is
-not a replacement, and it is not a summary to work from.
+`CLAUDE.md` points to this file. Read these instructions and `OWNERSHIP.md` before editing; this file contains the mobile-specific rules.
 
 **The lane table lives at `C:/CAPSTONE/activklass-web/OWNERSHIP.md`** — read it before
 your first edit, and treat anything it marks Shared as needing a heads-up first.
@@ -90,6 +86,6 @@ a file path in text a tester reads. Full rules in `desk/debug.md` step 7.
 
 ## Current architecture and documentation
 
-Use `README.md`, `ARCHITECTURE.md`, `INTEGRATION.md`, `TESTING.md`, and `DEPLOYMENT.md` for current repository guidance. Mobile source currently makes selected Flask calls (including risk prediction, initial password changes, and quiz flows); older `CLAUDE.md` statements that the app makes no server calls are stale. Re-derive callers from executable source before changing backend routes. The APK release channel is evidenced; iOS configuration alone is not release evidence.
+Use `README.md`, `ARCHITECTURE.md`, `INTEGRATION.md`, `TESTING.md`, and `DEPLOYMENT.md` for current repository guidance. Mobile source currently makes selected Flask calls (including risk prediction, initial password changes, and quiz flows); older backend `CLAUDE.md` and setup statements that mobile makes no server calls are stale. Re-derive callers from executable source before changing backend routes. The APK release channel is evidenced; iOS configuration alone is not release evidence.
 
 Across all repos, preserve existing work, keep docs grounded in source/config/tests, and distinguish deployment configuration from verified live state and implementation from research claims.
