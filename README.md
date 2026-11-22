@@ -5,7 +5,7 @@ The Expo and React Native app for ActivKlass students and parents/guardians. Tea
 ## Stack and architecture
 
 - Expo SDK 57, React Native 0.86, TypeScript, and Expo Router.
-- Firebase Authentication, Firestore, and AsyncStorage; Firestore is the system of record for client-facing records.
+- Firebase Authentication handles identity, Cloud Firestore is the primary application database, and AsyncStorage holds local app state. Backend trusted Firebase operations use Firebase Admin SDK.
 - Firebase rules in the backend repository govern direct client data access.
 - Current source also calls selected Flask APIs; `EXPO_PUBLIC_API_URL` configures transport. See [INTEGRATION.md](INTEGRATION.md).
 - Android APK is the evidenced distribution format. `app.json` also declares iOS support, which does not establish an iOS release.

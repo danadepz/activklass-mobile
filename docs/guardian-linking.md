@@ -1,5 +1,7 @@
 # Guardian linking
 
+> **Flow note:** This document describes a prior implementation snapshot. Firestore is the primary application database; PostgreSQL/Neon is not used. Backend SQLAlchemy/SQLite records may remain in legacy server routes. Verify current mobile callers and backend route implementations before treating the historical API gap below as current.
+
 How a parent connects to a student, and where each decision is actually made.
 
 ## The flow
@@ -23,7 +25,7 @@ checks as sign-up.
 
 ## Why the code lives in Firestore
 
-The code used to be minted by Flask and kept in Postgres. That made the check
+The code used to be minted by Flask and kept in a backend SQLAlchemy table. That made the check
 in step 1 impossible: `/api/guardian-links/redeem` is gated on the parent role,
 and a guardian has no account yet when they type the code. So step 1 could only
 check the *shape* of the code — six characters, no `O`/`0`/`I`/`1` — and a
@@ -78,12 +80,12 @@ detail is replaced with a notice.
 
 ### Known gap
 
-Flask resolves guardian links from its own Postgres `parent_student_links`
+Flask resolves guardian links from its own SQLAlchemy `parent_student_links`
 table. Links created in the app exist only in Firestore, so those endpoints do
 not yet recognise them and return `not_linked` — the dashboard degrades and the
 class screen says so in plain words, but the detail is genuinely unavailable
 until the backend reads links from Firestore too (or mirrors app-created links
-back into Postgres). That is the next piece of work on this feature.
+back into the backend SQL store). That was the next piece of work in this historical note; verify current callers and route code before treating it as outstanding.
 
 ## Files
 
