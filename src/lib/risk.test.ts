@@ -112,6 +112,62 @@ describe('trends', () => {
   })
 })
 
+describe('quiz trend parity with the web (A3, 2026-11-23)', () => {
+  // Same fixtures as the web's riskSignals.js; dates are the quizzes' own.
+  const att = (quiz_id: string | null, total_score: number | null, total_possible = 10, submitted_at = '2026-03-20') =>
+    ({ quiz_id, total_score, total_possible, submitted_at })
+  const due = { q1: '2026-03-01', q2: '2026-03-02', q3: '2026-03-03', q4: '2026-03-04' }
+
+  it('orders by due date even when submissions arrive in the opposite order', () => {
+    const late = [att('q3', 2, 10, '2026-03-01'), att('q2', 8, 10, '2026-03-02'), att('q1', 8, 10, '2026-03-03')]
+    expect(quizTrendFromAttempts(late, due)).toBe(-60) // 20 vs mean(80, 80)
+  })
+
+  it('takes the best scored attempt per quiz, whatever order the retakes came in', () => {
+    const a = [att('q1', 4), att('q1', 8), att('q2', 8), att('q3', 3), att('q3', 2)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-50) // q3 best 30 vs mean(80, 80)
+  })
+
+  it('keeps a scored zero as a real result', () => {
+    const a = [att('q1', 10), att('q2', 10), att('q3', 0)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-100)
+  })
+
+  it('leaves undated quizzes out of the chronology instead of guessing a place', () => {
+    const a = [att('q1', 9), att('q2', 9), att('q3', 3), att('qx', 0)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-60) // qx has no date: not part of it
+  })
+
+  it('gives no trend with fewer than three dated distinct scored quizzes', () => {
+    expect(quizTrendFromAttempts([att('q1', 9), att('q2', 3)], due)).toBeUndefined()
+    expect(quizTrendFromAttempts([att('q1', 9), att('q2', 3), att('qx', 1), att('qy', 1)], due)).toBeUndefined()
+    expect(quizTrendFromAttempts([att('q1', 9), att('q1', 3), att('q1', 1)], due)).toBeUndefined()
+  })
+
+  it('treats missing or unusable data as no evidence, never as zero', () => {
+    expect(quizTrendFromAttempts(undefined, due)).toBeUndefined()
+    expect(quizTrendFromAttempts([], due)).toBeUndefined()
+    // ungraded (no total_score), unusable (total_possible 0), legacy (no quiz_id)
+    const noise = [att('q1', null), att('q2', 5, 0), att(null, 9), att('q3', 7)]
+    expect(quizTrendFromAttempts(noise, due)).toBeUndefined()
+    expect(quizDueDates(undefined, undefined)).toEqual({})
+    expect(quizDueDates([{ id: 'q1', closes_at: 'soon' }], [{ source_quiz_id: 'q1', date_given: null }])).toEqual({})
+  })
+
+  it('an absent quiz trend keeps the six-input vector incomplete, so no score is shown', () => {
+    const indicators = buildRiskIndicators({
+      priorAverageGrade: 70, attendanceRate: 80, quizAverage: 60, attendanceTrend: -0.1,
+      quizTrend: quizTrendFromAttempts([att('q1', 9), att('q2', 3)], due), missingWorkRate: 0.2,
+    })
+    expect(indicators).not.toHaveProperty('quiz_trend')
+    const shaped = shapeRiskResult({ status: 'scored', risk_flag: 'high_risk', risk_score: 0.8 }, indicators)
+    expect(shaped.status).toBe('insufficient_data')
+    expect(shaped.atRisk).toBe(false)
+    expect(shaped.probability).toBeNull()
+    expect(shaped.missing).toEqual(['quiz_trend'])
+  })
+})
+
 describe('work not done', () => {
   it('counts missing assessments from the entry and skips excused ones', () => {
     const counts = missingWorkCountsFromEntry([
