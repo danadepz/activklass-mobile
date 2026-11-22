@@ -61,8 +61,14 @@ export default function StudentDashboard() {
      class). null while loading, so no forecast is requested on half the
      evidence. */
   const [forecasts, setForecasts] = useState<ForecastInputs[] | null>(null);
-  // A class snapshot can fire again before the previous load finishes; only
-  // the newest load may write state.
+  // Two generation tokens, each taken SYNCHRONOUSLY before any await, so the
+  // newest call always holds the highest number:
+  //   snapshotSeq -- one per class snapshot; guards the class list, which an
+  //                  older snapshot must not write once a newer one exists
+  //                  (its teacher-name reads can resolve last);
+  //   loadSeq     -- one per evidence load (snapshot or focus refresh); only
+  //                  the newest load may write grades and forecasts.
+  const snapshotSeq = useRef(0);
   const loadSeq = useRef(0);
   // The enrolled class ids from the last snapshot, and when evidence was last
   // read -- what the focus refresh below needs.
@@ -107,6 +113,7 @@ export default function StudentDashboard() {
     );
 
     const unsubscribeClasses = onSnapshot(classesQuery, async (snapshot) => {
+      const gen = ++snapshotSeq.current;
       const classList: ClassItem[] = [];
 
       for (const docSnap of snapshot.docs) {
@@ -122,13 +129,17 @@ export default function StudentDashboard() {
           grade_level: data.grade_level || null,
         });
       }
+      // A newer snapshot arrived while the teacher names were read: it owns the list.
+      if (gen !== snapshotSeq.current) return;
       setClasses(classList);
       classIdsRef.current = classList.map((c) => c.id);
       await loadStanding(classIdsRef.current);
-      setLoading(false);
+      if (gen === snapshotSeq.current) setLoading(false);
     }, (err) => {
+      // The listener has ended. Whatever already loaded stays; only a screen
+      // that never got evidence stops waiting for it.
       console.error('Error listening to classes:', err);
-      setForecasts([]);
+      setForecasts((current) => current ?? []);
       setLoading(false);
     });
 
