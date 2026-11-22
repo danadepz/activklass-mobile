@@ -35,4 +35,4 @@ Some web domain logic has a TypeScript mobile port. The web repository's `src/li
 
 - [Backend architecture](https://github.com/danadepz/activklass-backend/blob/main/ARCHITECTURE.md)
 - [Web architecture](https://github.com/danadepz/activklass-web/blob/main/ARCHITECTURE.md)
-- [Guardian linking notes](docs/guardian-linking.md)\n
+- [Guardian linking notes](docs/guardian-linking.md)

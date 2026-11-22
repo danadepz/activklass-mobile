@@ -92,4 +92,4 @@ a file path in text a tester reads. Full rules in `desk/debug.md` step 7.
 
 Use `README.md`, `ARCHITECTURE.md`, `INTEGRATION.md`, `TESTING.md`, and `DEPLOYMENT.md` for current repository guidance. Mobile source currently makes selected Flask calls (including risk prediction, initial password changes, and quiz flows); older `CLAUDE.md` statements that the app makes no server calls are stale. Re-derive callers from executable source before changing backend routes. The APK release channel is evidenced; iOS configuration alone is not release evidence.
 
-Across all repos, preserve existing work, keep docs grounded in source/config/tests, and distinguish deployment configuration from verified live state and implementation from research claims.\n
+Across all repos, preserve existing work, keep docs grounded in source/config/tests, and distinguish deployment configuration from verified live state and implementation from research claims.

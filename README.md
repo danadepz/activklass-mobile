@@ -40,8 +40,8 @@ See [TESTING.md](TESTING.md) for suite scopes and prerequisites.
 
 ## Distribution
 
-`package.json` defines a Windows `npm run build:apk` script, but the tracked `main` tree currently lacks the `android/` project and wrapper that script invokes. A repeatable build/release path needs maintainer confirmation. See [DEPLOYMENT.md](DEPLOYMENT.md).
+The repository uses Expo Prebuild to generate its ignored Android project from tracked Expo config. Run `npx expo prebuild --platform android` before the Windows `npm run build:apk` script. Signing and publication details still require maintainer confirmation; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Collaboration
 
-Work from a feature branch based on current `main`; open focused pull requests to `main` with affected client repositories and verification noted. Preserve uncommitted work, stage explicit paths, and never commit credentials, `.env`, generated user data, or private signing material. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).\n\n
+Work from a feature branch based on current `main`; open focused pull requests to `main` with affected client repositories and verification noted. Preserve uncommitted work, stage explicit paths, and never commit credentials, `.env`, generated user data, or private signing material. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).

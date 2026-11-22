@@ -14,4 +14,4 @@ Read `AGENTS.md`, `CLAUDE.md`, and relevant app/docs before editing. Use source,
 
 Coordinate API/schema/rules/shared-logic changes with the web and backend repositories. Keep guardian authorization least-privilege and test revocation/denial paths. Do not claim legal compliance based solely on app behavior. Avoid adding dependencies, paid services, or live provider operations without authorization.
 
-Run affected checks from [TESTING.md](TESTING.md), run `git diff --check`, and disclose checks not run. Include device/browser verification for user-visible flows when practical.\n
+Run affected checks from [TESTING.md](TESTING.md), run `git diff --check`, and disclose checks not run. Include device/browser verification for user-visible flows when practical.

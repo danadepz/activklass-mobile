@@ -17,4 +17,4 @@ npm run lint
 
 Install with `npm ci`. Screen tests may require the configured Jest mocks in `jest.setup.js`. Use Firebase emulators or fakes for data/auth behavior; do not point tests at production. Report exact commands and results in pull requests; a test file count is not evidence of execution or success.
 
-For API integration changes, test both the mobile request behavior and backend route/auth behavior. For guardian privacy, validate allowed and denied access paths. For mirrored web/mobile logic, coordinate the web parity test.\n
+For API integration changes, test both the mobile request behavior and backend route/auth behavior. For guardian privacy, validate allowed and denied access paths. For mirrored web/mobile logic, coordinate the web parity test.

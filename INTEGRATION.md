@@ -28,4 +28,4 @@ Current source has server callers for initial password changes, quiz attempt unl
 4. Keep shared web/mobile algorithm ports aligned and run the parity test where available.
 5. Document known limits. Risk model training evidence and research performance are separate from transport correctness.
 
-See [backend integration](https://github.com/danadepz/activklass-backend/blob/main/INTEGRATION.md) and [web integration](https://github.com/danadepz/activklass-web/blob/main/INTEGRATION.md).\n
+See [backend integration](https://github.com/danadepz/activklass-backend/blob/main/INTEGRATION.md) and [web integration](https://github.com/danadepz/activklass-web/blob/main/INTEGRATION.md).
