@@ -49,6 +49,18 @@ export interface AttendanceRecord {
   status?: string | null;
 }
 
+/**
+ * Attendance rate (0-100) for the MODEL, unrounded: 100 x (present + 0.5 x
+ * late) / (present + late + absent); excused and unrecognised marks are out
+ * of the denominator; nothing counted -> undefined, never 0 (owner decision
+ * 2026-11-23). The caller passes held sessions only. Mirrors the web's
+ * attendanceRateFromLog, which the teacher panel and student page use.
+ */
+export function attendanceRateFromLog(log: AttendanceRecord[] | undefined): number | undefined {
+  const marks = (log ?? []).map((r) => DAY_WEIGHT[r?.status ?? '']).filter((w) => w != null);
+  return marks.length ? (marks.reduce((a, b) => a + b, 0) / marks.length) * 100 : undefined;
+}
+
 /** Attendance trend (-1..1) from a log of `{ date, status }`, in any order. */
 export function attendanceTrendFromLog(log: AttendanceRecord[] | undefined): number | undefined {
   const marks = [...(log ?? [])]
@@ -67,18 +79,34 @@ export interface ScoredAttempt {
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
 
+/** A quiz id that identifies a quiz: a non-blank string. Mirrors the web's isQuizId. */
+export const isQuizId = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+
+/**
+ * The quiz a class-record column belongs to: its `source_quiz_id`, else the id
+ * inside the deterministic column id `quiz-{quizId}`. The student's entry
+ * copies the id but not source_quiz_id. Task (`task-…`), hand-entered and
+ * malformed ids give null. Mirrors the web's quizIdOfColumn.
+ */
+export function quizIdOfColumn(a: { id?: unknown; source_quiz_id?: unknown } | null | undefined): string | null {
+  if (isQuizId(a?.source_quiz_id)) return a!.source_quiz_id as string;
+  const m = typeof a?.id === 'string' ? /^quiz-(.+)$/.exec(a.id) : null;
+  return m && isQuizId(m[1]) ? m[1] : null;
+}
+
 /**
  * Each quiz's authoritative date, 'YYYY-MM-DD': its due date (`closes_at`),
- * else its class-record column's `date_given` (`source_quiz_id`). A quiz with
- * neither is left out -- no date is invented. Mirrors the web's quizDueDates.
+ * else its class-record column's `date_given` (linked by quizIdOfColumn). A
+ * quiz with neither is left out -- no date is invented. Mirrors the web.
  */
 export function quizDueDates(
   quizzes: { id?: string; closes_at?: string | null }[] | undefined,
-  assessments?: { source_quiz_id?: string | null; date_given?: string | null }[] | undefined
+  assessments?: { id?: unknown; source_quiz_id?: unknown; date_given?: string | null }[] | undefined
 ): Record<string, string> {
   const recordDate: Record<string, string> = {};
   for (const a of assessments ?? []) {
-    if (a?.source_quiz_id && ISO_DAY.test(a?.date_given ?? '')) recordDate[a.source_quiz_id] = (a.date_given as string).slice(0, 10);
+    const quizId = quizIdOfColumn(a);
+    if (quizId && ISO_DAY.test(a?.date_given ?? '')) recordDate[quizId] = (a.date_given as string).slice(0, 10);
   }
   const out: Record<string, string> = {};
   for (const q of quizzes ?? []) {
@@ -102,7 +130,7 @@ export function quizTrendFromAttempts(
 ): number | undefined {
   const byQuiz = new Map<string, { best: number; date: string | null; id: string }>();
   for (const a of attempts ?? []) {
-    if (a?.total_score == null || !a?.total_possible || !a?.quiz_id) continue;
+    if (a?.total_score == null || !a?.total_possible || !isQuizId(a?.quiz_id)) continue;
     const pct = (a.total_score / a.total_possible) * 100;
     const cur = byQuiz.get(a.quiz_id);
     if (!cur) byQuiz.set(a.quiz_id, { best: pct, date: quizDates[a.quiz_id] ?? null, id: a.quiz_id });

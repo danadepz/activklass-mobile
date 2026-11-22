@@ -14,7 +14,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('../config/firebase', () => ({ db: {} }))
 
 const { forecastInputsFor, loadQuizEvidence, withQuizLinks, visibleQuizzesFor } = await import('./studentForecast')
-const { quizDueDates, quizTrendFromAttempts, missedQuizCounts, missedQuizCountsIfKnown, missingRate, missingWorkCountsFromEntry } = await import('./riskSignals')
+const { quizDueDates, quizTrendFromAttempts, missedQuizCounts, missedQuizCountsIfKnown, missingRate, missingWorkCountsFromEntry, quizIdOfColumn } = await import('./riskSignals')
 
 const ME = 'me'
 const att = (quiz_id: string, total_score: number | null, extra: any = {}) =>
@@ -126,10 +126,20 @@ describe('forecast inputs for one class', () => {
     expect(build({}, entry([], { mode: 'ched_point', final_grade: 2.25 })).grade).toBeNull()
   })
 
-  it('attendance is the recorded rate and log of this class, as the web student page passes', () => {
-    const f = build({}, entry(), attendance(['present', 'late']))
-    expect(f.attendanceRate).toBe(99)
-    expect(f.attendanceLog.map((d: any) => d.status)).toEqual(['present', 'late'])
+  it('model attendance is the weighted rate over held sessions, not the display rate (owner decision 2026-11-23)', () => {
+    // 4 present, 2 late, 1 absent, 1 excused -> 100 * 5 / 7 = 71.428571…, not 4/8 = 50.
+    const a = attendance(['present', 'present', 'present', 'present', 'late', 'late', 'absent', 'excused'])
+    expect(build({}, entry(), a).attendanceRate).toBeCloseTo(500 / 7, 10)
+    // Marks on cancelled and moved-away meetings never count.
+    a.log.push(
+      { date: '2026-03-20', status: 'absent', remarks: null, excuse_url: null, session_status: 'cancelled' } as any,
+      { date: '2026-03-21', status: 'absent', remarks: null, excuse_url: null, session_status: 'rescheduled' } as any,
+    )
+    const f = build({}, entry(), a)
+    expect(f.attendanceRate).toBeCloseTo(500 / 7, 10)
+    expect(f.attendanceLog).toHaveLength(10) // the log itself is untouched (trend and display read it)
+    // Nothing counted (only excused) is missing, not zero; the display rate is not used.
+    expect(build({}, entry(), attendance(['excused'])).attendanceRate).toBeNull()
   })
 
   it('drafts and quizzes assigned to other students are not expected of this student', () => {
@@ -247,3 +257,41 @@ describe('missing work is withheld when the quiz half is unknown', () => {
     expect(rateFor(forecastInputsFor({ classId: 'c1', studentId: ME, entry: entry(), attendance: null, evidence: ev.c1 }))).toBeUndefined()
   })
 })
+
+describe('identified quizzes only, and malformed column ids (2026-11-23)', () => {
+  const quizzes = [quiz('q1', '2026-03-01T17:00'), quiz('q2', '2026-03-02T17:00'), quiz('q3', '2026-03-03T17:00')]
+
+  it('scored attempts without a valid quiz_id are left out of the average, trend and attempted set', () => {
+    const f = build({
+      quizzes,
+      attempts: [
+        att('q1', 8), att('q2', 8), att('q3', 2),
+        att(undefined as any, 10), att(null as any, 10), att('', 10), att('   ', 10),
+      ],
+    })
+    expect(f.quizAverage).toBe(60)
+    expect(trendOf(f)).toBe(-60)
+    expect([...(f.attemptedQuizIds ?? [])].sort()).toEqual(['q1', 'q2', 'q3'])
+    expect(f.attempts?.length).toBe(7) // the attempts themselves are kept, untouched
+  })
+
+  it('only unidentified scored attempts -> no average (unknown, never zero)', () => {
+    expect(build({ quizzes, attempts: [att(undefined as any, 9), att('', 9)] }).quizAverage).toBeNull()
+  })
+
+  it('malformed column ids link to no quiz', () => {
+    for (const id of ['quiz-', 'quiz-   ', 'quiz', 'Quiz-abc', 'task-abc', 'Xy7random', 'xquiz-abc', '', null, undefined, 42]) {
+      expect(quizIdOfColumn({ id })).toBeNull()
+    }
+    expect(quizIdOfColumn({ id: 'quiz-abc' })).toBe('abc')
+    expect(quizIdOfColumn({ id: 'quiz-abc', source_quiz_id: 'xyz' })).toBe('xyz')
+    expect(withQuizLinks([{ id: 'quiz-   ', title: 'x', date_given: '2026-03-01' }])[0].source_quiz_id).toBeUndefined()
+  })
+
+  it('quizDueDates links a column by its id alone, closes_at still first', () => {
+    const cols = [{ id: 'quiz-q2', date_given: '2026-03-09' }, { id: 'quiz-q4', date_given: '2026-03-10' }]
+    expect(quizDueDates([quiz('q2', '2026-03-02T17:00'), quiz('q4', null), quiz('q5', null)], cols))
+      .toEqual({ q2: '2026-03-02', q4: '2026-03-10' })
+  })
+})
+

@@ -140,4 +140,18 @@ describe('loadStudentAttendance', () => {
     expect(a.tally).toEqual({ present: 1, late: 1, absent: 0, excused: 0 })
     expect(a.rate).toBe(50)
   })
+
+  it('tags each day with its session status; the log, tally and display rate keep every mark', async () => {
+    getDocs.mockResolvedValue({
+      forEach: (fn: any) => {
+        fn({ id: '2026-03-01', data: () => ({ records: { s1: { status: 'present' } } }) })
+        fn({ id: '2026-03-02', data: () => ({ session_status: 'cancelled', records: { s1: { status: 'absent' } } }) })
+        fn({ id: '2026-03-03', data: () => ({ session_status: 'rescheduled', records: { s1: { status: 'absent' } } }) })
+      },
+    })
+    const a = await loadStudentAttendance('c1', 's1')
+    expect(a.log.map((d) => `${d.date}:${d.session_status}`)).toEqual(['2026-03-03:rescheduled', '2026-03-02:cancelled', '2026-03-01:held'])
+    expect(a.tally).toEqual({ present: 1, late: 0, absent: 2, excused: 0 })
+    expect(a.rate).toBe(33)
+  })
 })

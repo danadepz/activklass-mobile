@@ -19,11 +19,8 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { isPointScale } from './gradeDisplay';
-import { quizAverageOf, ScoredAttempt } from './riskSignals';
+import { attendanceRateFromLog, isQuizId, quizAverageOf, quizIdOfColumn, ScoredAttempt } from './riskSignals';
 import type { AttendanceSummary, EntryAssessment, StudentEntry } from './studentData';
-
-/** The record column a published quiz becomes: `quiz-{quizId}` (web quizToRecord.assessmentIdForQuiz). */
-const QUIZ_COLUMN = /^quiz-(.+)$/;
 
 /**
  * The student's entry copies each record column's id and date_given but not
@@ -35,8 +32,8 @@ const QUIZ_COLUMN = /^quiz-(.+)$/;
 export function withQuizLinks(assessments: EntryAssessment[] | undefined): EntryAssessment[] {
   return (assessments ?? []).map((a) => {
     if (a?.source_quiz_id) return a;
-    const m = typeof a?.id === 'string' ? QUIZ_COLUMN.exec(a.id) : null;
-    return m ? { ...a, source_quiz_id: m[1] } : a;
+    const quizId = quizIdOfColumn(a);
+    return quizId ? { ...a, source_quiz_id: quizId } : a;
   });
 }
 
@@ -94,7 +91,9 @@ export function forecastInputsFor({
   );
   const byQuiz: Record<string, ScoredAttempt[]> = {};
   for (const a of attempts ?? []) {
-    if (a.quiz_id) (byQuiz[a.quiz_id] ??= []).push(a);
+    // Identified quizzes only (owner decision 2026-11-23): an attempt with no
+    // quiz_id cannot be told from a retake, so it is left out of the average.
+    if (isQuizId(a.quiz_id)) (byQuiz[a.quiz_id] ??= []).push(a);
   }
   const log = attendance?.log ?? [];
   return {
@@ -102,8 +101,11 @@ export function forecastInputsFor({
     studentId,
     // A 1.0-5.0 point grade read as a percent is a certain fail: withheld, as on the web.
     grade: entry && !isPointScale(entry.mode) ? entry.final_grade ?? null : null,
-    // This class's recorded rate, the figure the web student page passes (see report).
-    attendanceRate: attendance?.rate ?? null,
+    // The model's rate: weighted (late 0.5, excused out) over HELD sessions
+    // only, as the teacher panel and the web student page compute it (owner
+    // decision 2026-11-23). attendance.rate (present / all marks) stays the
+    // display figure. Unrounded; nothing counted -> null, never 0.
+    attendanceRate: attendanceRateFromLog(log.filter((d) => (d.session_status ?? 'held') === 'held')) ?? null,
     attendanceLog: log,
     // Unknown attempts give no average -- never a zero.
     quizAverage: attempts ? quizAverageOf(byQuiz) : null,
