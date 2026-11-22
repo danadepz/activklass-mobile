@@ -86,6 +86,6 @@ a file path in text a tester reads. Full rules in `desk/debug.md` step 7.
 
 ## Current architecture and documentation
 
-Use `README.md`, `ARCHITECTURE.md`, `INTEGRATION.md`, `TESTING.md`, and `DEPLOYMENT.md` for current repository guidance. Mobile source currently makes selected Flask calls (including risk prediction, initial password changes, and quiz flows); older backend `CLAUDE.md` and setup statements that mobile makes no server calls are stale. Re-derive callers from executable source before changing backend routes. The APK release channel is evidenced; iOS configuration alone is not release evidence.
+Use `README.md`, `ARCHITECTURE.md`, `INTEGRATION.md`, `TESTING.md`, and `DEPLOYMENT.md` for current repository guidance. Mobile source currently makes selected Flask calls (including risk prediction, initial password changes, and quiz flows); Backend `CLAUDE.md`, root setup guidance, and current client source should be read together; both clients make selected Flask calls as described in current integration docs. Re-derive callers from executable source before changing backend routes. The APK release channel is evidenced; iOS configuration alone is not release evidence.
 
 Across all repos, preserve existing work, keep docs grounded in source/config/tests, and distinguish deployment configuration from verified live state and implementation from research claims.
