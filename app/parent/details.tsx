@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useState } from 'react';
 import {
   View,
@@ -65,7 +66,7 @@ export default function ParentDetailsScreen() {
   const [contactNumber, setContactNumber] = useState('');
   const [relationship, setRelationship] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
 
   const handleSubmitDetails = async () => {
     const fnErr = nameError(firstName, { label: 'First name' });

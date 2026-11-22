@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -72,14 +73,14 @@ export default function StudentClassDetail() {
   const [showContestModal, setShowContestModal] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
   const [contestReason, setContestReason] = useState('');
-  const [contestError, setContestError] = useState<string | null>(null);
+  const [contestError, setContestError] = useTransientMessage();
   const [submittingContest, setSubmittingContest] = useState(false);
 
   // Attendance State
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [selectedAttendanceLog, setSelectedAttendanceLog] = useState<any>(null);
   const [attendanceReason, setAttendanceReason] = useState('');
-  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [attendanceError, setAttendanceError] = useTransientMessage();
   const [submittingAttendanceContest, setSubmittingAttendanceContest] = useState(false);
 
   // Announcements State

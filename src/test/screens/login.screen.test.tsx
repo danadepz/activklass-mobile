@@ -1,9 +1,26 @@
 import React from 'react';
-import { screen, waitFor, fireEvent } from '@testing-library/react-native';
+import { act, screen, waitFor, fireEvent } from '@testing-library/react-native';
 import { renderScreen } from '../renderScreen';
 import LoginScreen from '../../../app/login';
 
 describe('login screen', () => {
+  it('clears a repeated validation warning three seconds after the last attempt', async () => {
+    jest.useFakeTimers();
+    try {
+      await renderScreen(<LoginScreen />);
+      const submit = screen.getByText('Sign In');
+      await fireEvent.press(submit);
+      await act(async () => { jest.advanceTimersByTime(2500); });
+      await fireEvent.press(submit);
+      await act(async () => { jest.advanceTimersByTime(2999); });
+      expect(screen.getByText('Please fill in all fields.')).toBeTruthy();
+      await act(async () => { jest.advanceTimersByTime(1); });
+      expect(screen.queryByText('Please fill in all fields.')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('mounts without crashing', () => {
     expect(() => renderScreen(<LoginScreen />)).not.toThrow();
   });

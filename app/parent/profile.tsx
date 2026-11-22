@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useState } from 'react';
 import {
   View,
@@ -44,7 +45,7 @@ export default function ParentProfileScreen() {
   const [contactNumber, setContactNumber] = useState(profile?.contact_number ?? '');
 
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [success, setSuccess] = useState<string | null>(null);
 
   const dirty =

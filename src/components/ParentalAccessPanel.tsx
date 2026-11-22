@@ -1,3 +1,4 @@
+import { showNotice } from '@/src/lib/notice';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Switch } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -96,7 +97,7 @@ export default function ParentalAccessPanel() {
             try {
               setCode(await rotateMyGuardianCode());
             } catch {
-              Alert.alert('Could not regenerate', 'Please check your connection and try again.');
+              showNotice('Could not regenerate', 'Please check your connection and try again.');
             } finally {
               setBusy(null);
             }
@@ -116,7 +117,7 @@ export default function ParentalAccessPanel() {
     try {
       await setGuardianLinkScopes(link.link_id, next);
     } catch {
-      Alert.alert('Could not update', 'That change did not save. Please try again.');
+      showNotice('Could not update', 'That change did not save. Please try again.');
       load(); // put the switch back where the server says it is
     } finally {
       setBusy(null);
@@ -131,7 +132,7 @@ export default function ParentalAccessPanel() {
     try {
       await setDefaultScopes(code, next);
     } catch {
-      Alert.alert('Could not update', 'That change did not save. Please try again.');
+      showNotice('Could not update', 'That change did not save. Please try again.');
       load();
     } finally {
       setBusy(null);
@@ -145,7 +146,7 @@ export default function ParentalAccessPanel() {
       await approveGuardianLink(link.link_id, defaults);
       await load();
     } catch {
-      Alert.alert('Could not approve', 'Please check your connection and try again.');
+      showNotice('Could not approve', 'Please check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -166,7 +167,7 @@ export default function ParentalAccessPanel() {
               await revokeGuardianLink(link.link_id);
               await load();
             } catch {
-              Alert.alert('Could not remove', 'Please check your connection and try again.');
+              showNotice('Could not remove', 'Please check your connection and try again.');
             } finally {
               setBusy(null);
             }

@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +28,7 @@ export default function StudentProfileScreen() {
      registrar data. It comes from the device gallery and is stored inline,
      because this project has no Storage bucket — see src/lib/avatar.ts. */
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useTransientMessage();
 
   const changePhoto = async () => {
     setPhotoError(null);

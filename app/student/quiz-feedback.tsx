@@ -1,5 +1,6 @@
+import { showNotice } from '@/src/lib/notice';
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRequireAuth } from '../../src/hooks/useRequireAuth';
@@ -137,12 +138,12 @@ export default function QuizFeedback() {
             /* Fallback covers it. */
           }
         } else {
-          Alert.alert('Error', 'Quiz attempt details not found.');
+          showNotice('Error', 'Quiz attempt details not found.');
           router.back();
         }
       } catch (e) {
         console.error(e);
-        Alert.alert('Error', 'Failed to retrieve assessment feedback data.');
+        showNotice('Error', 'Failed to retrieve assessment feedback data.');
       } finally {
         setLoading(false);
       }

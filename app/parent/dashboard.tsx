@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -82,7 +83,7 @@ export default function ParentDashboard() {
   const [showSwitchSheet, setShowSwitchSheet] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [inviteCodeInput, setInviteCodeInput] = useState('');
-  const [addChildError, setAddChildError] = useState<string | null>(null);
+  const [addChildError, setAddChildError] = useTransientMessage();
   const [submittingLink, setSubmittingLink] = useState(false);
 
   const load = useCallback(async () => {

@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/src/hooks/useTransientMessage';
 import React, { useState } from 'react';
 import {
   View,
@@ -40,7 +41,7 @@ export default function ParentRegisterCodeScreen() {
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [match, setMatch] = useState<GuardianCodeDoc | null>(null);
 
   const handleVerifyCode = async () => {

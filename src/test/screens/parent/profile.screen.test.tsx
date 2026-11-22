@@ -16,7 +16,7 @@ beforeEach(() => {
 
 describe('guardian profile screen', () => {
   it('mounts without throwing', async () => {
-    expect(() => renderScreen(<ParentProfileScreen />)).not.toThrow()
+    await renderScreen(<ParentProfileScreen />)
     await waitFor(() => expect(screen.toJSON()).toBeTruthy())
   })
 

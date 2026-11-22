@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider as AppThemeProvider } from '../src/context/ThemeContext';
 import { AuthProvider } from '../src/context/AuthContext';
+import { NoticeHost } from '../src/components/NoticeHost';
 import '../global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
@@ -69,6 +70,7 @@ function RootLayoutNav() {
               <Stack.Screen name="parent" options={{ headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
             </Stack>
+            <NoticeHost />
           </ThemeProvider>
         </AuthProvider>
       </SafeAreaProvider>

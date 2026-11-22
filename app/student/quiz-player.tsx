@@ -1,3 +1,4 @@
+import { showNotice } from '@/src/lib/notice';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -156,12 +157,12 @@ export default function QuizPlayer() {
             setGate(gateFor(quizData, prior, uid));
           }
         } else {
-          Alert.alert('Error', 'Quiz not found.');
+          showNotice('Error', 'Quiz not found.');
           router.back();
         }
       } catch (e) {
         console.error('Failed to load quiz details:', e);
-        Alert.alert('Error', 'Failed to load quiz details.');
+        showNotice('Error', 'Failed to load quiz details.');
       } finally {
         setLoading(false);
       }
@@ -201,7 +202,7 @@ export default function QuizPlayer() {
            The web player has always submitted without asking. A timer that
            ends the exam should not also require a tap to bank the work. */
         autoSubmit();
-        Alert.alert('Time Up', 'Your time has run out. Your answers have been submitted.');
+        showNotice('Time Up', 'Your time has run out. Your answers have been submitted.');
       }
     }, 1000);
 
@@ -374,7 +375,7 @@ export default function QuizPlayer() {
       // The server's refusals (wrong password, too many tries, not set up) are
       // written for the student; anything else stays the generic line.
       const told = e instanceof ApiError && (e.status === 403 || e.status === 409 || e.status === 429 || e.code === 'network');
-      Alert.alert('Could not start', told ? (e as ApiError).message : 'The attempt could not be opened. Check your connection and try again.');
+      showNotice('Could not start', told ? (e as ApiError).message : 'The attempt could not be opened. Check your connection and try again.');
     } finally {
       setStarting(false);
     }
@@ -452,7 +453,7 @@ export default function QuizPlayer() {
       } catch {
         /* Keep the connection message. */
       }
-      Alert.alert('Submission Failed', message);
+      showNotice('Submission Failed', message);
       setLoading(false);
     }
   };

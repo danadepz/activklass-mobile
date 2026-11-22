@@ -15,7 +15,7 @@ beforeEach(() => {
 
 describe('guardian dashboard', () => {
   it('mounts for a guardian with no children linked', async () => {
-    renderScreen(<ParentDashboard />)
+    await renderScreen(<ParentDashboard />)
     await waitFor(() => expect(screen.getByText('No Child Linked')).toBeTruthy())
   })
 
