@@ -24,6 +24,20 @@ describe('buildNotifications', () => {
       .toEqual(['eng', 'math'])
   })
 
+  it("follows the class's own pass policy, not a fixed 75 or 3.0", () => {
+    const n = buildNotifications('s1', 'Ana', {
+      ...base, classes: [
+        { ...cls('pct60', 70), mode: 'ched_percentage', passing_percent: 60 },   // passes at 60
+        { ...cls('pct80', 78), mode: 'ched_percentage', passing_percent: 80 },   // fails at 80
+        { ...cls('deped', 74), mode: 'deped_k12', passing_percent: 60 },         // DepEd stays 75
+        { ...cls('inv', 2.0), mode: 'ched_point', point_scale_direction: 'inverted' }, // 5.0 best: fails
+        { ...cls('ched', 2.0), mode: 'ched_point' },                             // 1.0 best: passes
+      ],
+    })
+    expect(n.filter((x) => x.kind === 'low_grade').map((x) => x.id.split(':')[2]).sort())
+      .toEqual(['deped', 'inv', 'pct80'])
+  })
+
   it('titles the single worst grade "Lowest grade"', () => {
     const n = buildNotifications('s1', 'Ana', { ...base, classes: [cls('math', 60), cls('sci', 70)] })
     expect(n.find((x) => x.id.includes(':math:'))?.title).toBe('Lowest grade')
