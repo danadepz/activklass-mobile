@@ -62,6 +62,9 @@ export interface AttendanceDay {
   status: string;
   remarks: string | null;
   excuse_url: string | null;
+  /** 'held' unless the teacher cancelled ('cancelled') or moved ('rescheduled')
+   *  the meeting. The risk model counts held days only; the log shows all. */
+  session_status?: string;
 }
 
 export interface AttendanceSummary {
@@ -150,6 +153,7 @@ export async function loadStudentAttendance(
         status: rec.status,
         remarks: rec.remarks ?? null,
         excuse_url: rec.excuse_url ?? null,
+        session_status: data.session_status ?? 'held',
       });
     });
     log.sort((a, b) => b.date.localeCompare(a.date));

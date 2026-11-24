@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemeColors } from '../../../src/theme';
 import { formatGrade, gradeTone, gradePolicy, itemPasses, passNote } from '../../../src/lib/gradeDisplay';
 import { loadSyllabus } from '../../../src/lib/studentData';
+import { studentAnnouncementsQuery } from '../../../src/lib/studentAnnouncements';
 import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '../../../src/lib/quizAttempts';
 import { STATE_BADGE, describeWindow, fromQuiz } from '../../../src/lib/deliverables';
 
@@ -158,7 +159,15 @@ export default function StudentClassDetail() {
         setClassInfo(docSnap.data());
         const syl = await loadSyllabus(classId as string);
         if (syl) setSyllabus(syl);
+      } else {
+        // No class, no announcements read to wait for: stop the spinner.
+        setAnnouncementsFailed(true);
+        setLoading(false);
       }
+    }, (err) => {
+      console.error('[StudentClass] class:', err);
+      setAnnouncementsFailed(true);
+      setLoading(false);
     });
 
     // 2. Fetch Syllabus Info (per-class fallback)
@@ -252,22 +261,8 @@ export default function StudentClassDetail() {
       setAttendanceLogs(list);
     });
 
-    // 6. Fetch Class Announcements
-    const announcementsQuery = query(
-      collection(db, 'announcements'),
-      where('class_id', '==', classId)
-    );
-    const unsubscribeAnnouncements = onSnapshot(announcementsQuery, (snapshot) => {
-      const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a: any, b: any) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
-      setAnnouncements(list);
-      setAnnouncementsFailed(false);
-      setLoading(false);
-    }, (err) => {
-      console.error(err);
-      setAnnouncementsFailed(true);
-      setLoading(false);
-    });
+    // 6. Class announcements: their own effect below, because the query
+    // needs the class's teacher_id from step 1.
 
     return () => {
       unsubscribeClass();
@@ -277,9 +272,37 @@ export default function StudentClassDetail() {
       unsubscribeAttempts();
       unsubscribeGrades();
       unsubscribeAttendance();
-      unsubscribeAnnouncements();
     };
   }, [classId]);
+
+  // Announcements, once the class document is in. class_id + the class's own
+  // teacher_id is the shape the rules can prove; class_id alone is refused for
+  // every student (lib/studentAnnouncements.ts). No usable teacher id means no
+  // query and the "couldn't load" state, never a silent empty list.
+  const classLoaded = classInfo != null;
+  const classTeacherId = classInfo?.teacher_id;
+  useEffect(() => {
+    if (!classId || !classLoaded || !auth.currentUser) return;
+    const announcementsQuery = studentAnnouncementsQuery(db, classId, classTeacherId);
+    if (!announcementsQuery) {
+      console.error('[StudentClass] announcements: class has no usable teacher_id');
+      setAnnouncements([]);
+      setAnnouncementsFailed(true);
+      setLoading(false);
+      return;
+    }
+    return onSnapshot(announcementsQuery, (snapshot) => {
+      const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      list.sort((a: any, b: any) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
+      setAnnouncements(list);
+      setAnnouncementsFailed(false);
+      setLoading(false);
+    }, (err) => {
+      console.error('[StudentClass] announcements:', err);
+      setAnnouncementsFailed(true);
+      setLoading(false);
+    });
+  }, [classId, classLoaded, classTeacherId]);
 
   // Handle grade dispute submission
   const handleSubmitContest = async () => {

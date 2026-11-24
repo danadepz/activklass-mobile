@@ -49,6 +49,18 @@ export interface AttendanceRecord {
   status?: string | null;
 }
 
+/**
+ * Attendance rate (0-100) for the MODEL, unrounded: 100 x (present + 0.5 x
+ * late) / (present + late + absent); excused and unrecognised marks are out
+ * of the denominator; nothing counted -> undefined, never 0 (owner decision
+ * 2026-11-23). The caller passes held sessions only. Mirrors the web's
+ * attendanceRateFromLog, which the teacher panel and student page use.
+ */
+export function attendanceRateFromLog(log: AttendanceRecord[] | undefined): number | undefined {
+  const marks = (log ?? []).map((r) => DAY_WEIGHT[r?.status ?? '']).filter((w) => w != null);
+  return marks.length ? (marks.reduce((a, b) => a + b, 0) / marks.length) * 100 : undefined;
+}
+
 /** Attendance trend (-1..1) from a log of `{ date, status }`, in any order. */
 export function attendanceTrendFromLog(log: AttendanceRecord[] | undefined): number | undefined {
   const marks = [...(log ?? [])]
@@ -59,23 +71,75 @@ export function attendanceTrendFromLog(log: AttendanceRecord[] | undefined): num
 }
 
 export interface ScoredAttempt {
+  quiz_id?: string | null;
   total_score?: number | null;
   total_possible?: number | null;
   submitted_at?: any;
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
+
+/** A quiz id that identifies a quiz: a non-blank string. Mirrors the web's isQuizId. */
+export const isQuizId = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+
 /**
- * Quiz trend in percentage points from attempts carrying `submitted_at`.
- * Walks attempts in submission order, unlike the quiz *average*, which stays
- * best-per-student; a student whose scores are falling still has their one
- * good early attempt sitting in the maximum.
+ * The quiz a class-record column belongs to: its `source_quiz_id`, else the id
+ * inside the deterministic column id `quiz-{quizId}`. The student's entry
+ * copies the id but not source_quiz_id. Task (`task-…`), hand-entered and
+ * malformed ids give null. Mirrors the web's quizIdOfColumn.
  */
-export function quizTrendFromAttempts(attempts: ScoredAttempt[] | undefined): number | undefined {
-  const scored = (attempts ?? [])
-    .filter((a) => a?.total_score != null && a?.total_possible)
-    .map((a) => ({ pct: (a.total_score! / a.total_possible!) * 100, at: sortKey(a.submitted_at) }))
-    .sort((x, y) => x.at.localeCompare(y.at));
-  return splitTrend(scored.map((a) => a.pct), MIN_ATTEMPTS);
+export function quizIdOfColumn(a: { id?: unknown; source_quiz_id?: unknown } | null | undefined): string | null {
+  if (isQuizId(a?.source_quiz_id)) return a!.source_quiz_id as string;
+  const m = typeof a?.id === 'string' ? /^quiz-(.+)$/.exec(a.id) : null;
+  return m && isQuizId(m[1]) ? m[1] : null;
+}
+
+/**
+ * Each quiz's authoritative date, 'YYYY-MM-DD': its due date (`closes_at`),
+ * else its class-record column's `date_given` (linked by quizIdOfColumn). A
+ * quiz with neither is left out -- no date is invented. Mirrors the web.
+ */
+export function quizDueDates(
+  quizzes: { id?: string; closes_at?: string | null }[] | undefined,
+  assessments?: { id?: unknown; source_quiz_id?: unknown; date_given?: string | null }[] | undefined
+): Record<string, string> {
+  const recordDate: Record<string, string> = {};
+  for (const a of assessments ?? []) {
+    const quizId = quizIdOfColumn(a);
+    if (quizId && ISO_DAY.test(a?.date_given ?? '')) recordDate[quizId] = (a.date_given as string).slice(0, 10);
+  }
+  const out: Record<string, string> = {};
+  for (const q of quizzes ?? []) {
+    const due = ISO_DAY.test(q?.closes_at ?? '') ? (q.closes_at as string).slice(0, 10) : null;
+    const date = due ?? (q?.id ? recordDate[q.id] : undefined) ?? null;
+    if (q?.id && date) out[q.id] = date;
+  }
+  return out;
+}
+
+/**
+ * Quiz trend in percentage points across DISTINCT graded quizzes: each quiz's
+ * best scored attempt, ordered by the quiz's AUTHORITATIVE date (policy A3,
+ * 2026-11-22) from `quizDates`. A quiz without one takes no part -- fewer than
+ * MIN_ATTEMPTS dated quizzes gives undefined, never a trend in submission
+ * order. Mirrors the web's quizTrendFromAttempts; retakes fold into one quiz.
+ */
+export function quizTrendFromAttempts(
+  attempts: ScoredAttempt[] | undefined,
+  quizDates: Record<string, string> = {}
+): number | undefined {
+  const byQuiz = new Map<string, { best: number; date: string | null; id: string }>();
+  for (const a of attempts ?? []) {
+    if (a?.total_score == null || !a?.total_possible || !isQuizId(a?.quiz_id)) continue;
+    const pct = (a.total_score / a.total_possible) * 100;
+    const cur = byQuiz.get(a.quiz_id);
+    if (!cur) byQuiz.set(a.quiz_id, { best: pct, date: quizDates[a.quiz_id] ?? null, id: a.quiz_id });
+    else cur.best = Math.max(cur.best, pct);
+  }
+  const ordered = [...byQuiz.values()]
+    .filter((q) => q.date)
+    .sort((x, y) => `${x.date}|${x.id}`.localeCompare(`${y.date}|${y.id}`));
+  return splitTrend(ordered.map((q) => q.best), MIN_ATTEMPTS);
 }
 
 export interface WorkCounts {
@@ -126,17 +190,41 @@ export function missedQuizCounts(
   quizzes: any[] | undefined,
   attemptedQuizIds: Set<string> | undefined,
   studentId: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  excusedQuizIds: Set<string> | null = null
 ): WorkCounts {
   const attempted = attemptedQuizIds ?? new Set<string>();
   let expected = 0;
   let notDone = 0;
   for (const quiz of quizzes ?? []) {
     if (!assignedTo(quiz, studentId) || !windowClosed(quiz, now)) continue;
+    // A4: an officially excused quiz leaves numerator AND denominator (web parity).
+    if (excusedQuizIds?.has(quiz.id)) continue;
     expected += 1;
     if (!attempted.has(quiz.id)) notDone += 1;
   }
   return { notDone, expected };
+}
+
+/**
+ * missedQuizCounts, but only when every input behind it is KNOWN; undefined
+ * otherwise, so the missing-work rate is withheld (insufficient data) instead
+ * of being built on a guess. Unknown quizzes would read as "nothing expected",
+ * unknown attempts as "every closed quiz missed", unknown excusals as "none
+ * excused". `undefined` means unknown; an empty Set means known-none.
+ * Unknown excusals are harmless only when no quiz was expected at all, since
+ * an excusal can only take an expected quiz away.
+ */
+export function missedQuizCountsIfKnown(
+  quizzes: any[] | undefined,
+  attemptedQuizIds: Set<string> | undefined,
+  studentId: string,
+  excusedQuizIds: Set<string> | undefined,
+  now: number = Date.now()
+): WorkCounts | undefined {
+  if (!quizzes || !attemptedQuizIds) return undefined;
+  const counts = missedQuizCounts(quizzes, attemptedQuizIds, studentId, now, excusedQuizIds ?? null);
+  return excusedQuizIds === undefined && counts.expected > 0 ? undefined : counts;
 }
 
 /**
@@ -157,7 +245,8 @@ export function missingRate(...counts: (WorkCounts | null | undefined)[]): numbe
 /**
  * Best percentage per quiz, averaged — one input to the standing forecast.
  * Best rather than latest, matching how the teacher's mastery figures read
- * attempts. Mirrors the inline computation on the web's class page.
+ * attempts. Unrounded, as the web's quizAverageFromAttempts: the model gets
+ * the exact mean and display rounds on its own (risk.ts READABLE text).
  */
 export function quizAverageOf(attemptsByQuiz: Record<string, ScoredAttempt[]>): number | null {
   const bests = Object.values(attemptsByQuiz)
@@ -167,5 +256,5 @@ export function quizAverageOf(attemptsByQuiz: Record<string, ScoredAttempt[]>): 
       return Math.max(...scored.map((a) => (a.total_score! / a.total_possible!) * 100));
     })
     .filter((v): v is number => v != null);
-  return bests.length ? Math.round(bests.reduce((s, v) => s + v, 0) / bests.length) : null;
+  return bests.length ? bests.reduce((s, v) => s + v, 0) / bests.length : null;
 }

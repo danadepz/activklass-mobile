@@ -24,13 +24,21 @@ describe('student class detail screen', () => {
  * refused read rendered the same empty list as a class with none -- so the
  * student could not tell "nothing posted" from "could not load".
  */
+// Every listener-driven test serves the class document: the announcements
+// query is built from its teacher_id (class_id alone is refused by the rules),
+// so a fake that never answers the class listener leaves the screen loading.
+const CLASS_PATH = 'classes/class-1'
+const classSnap = { exists: () => true, id: 'class-1', data: () => ({ teacher_id: 'teacher-1', student_ids: ['test-student'] }) }
+
 describe('student class announcements tab (T-253)', () => {
   const firestore = require('firebase/firestore')
   // Tag each query with its collection so the listener can answer per query.
   const listen = (onAnnouncements: (next: any, fail: any) => void) => {
     firestore.collection.mockImplementation((_db: any, name: string) => ({ name }))
     firestore.query.mockImplementation((ref: any) => ref)
+    firestore.doc.mockImplementation((_db: any, ...segments: string[]) => ({ path: segments.join('/') }))
     firestore.onSnapshot.mockImplementation((ref: any, next: any, fail: any) => {
+      if (ref?.path === CLASS_PATH) next(classSnap)
       if (ref?.name === 'announcements') onAnnouncements(next, fail)
       return () => {}
     })
@@ -42,6 +50,7 @@ describe('student class announcements tab (T-253)', () => {
   afterEach(() => {
     (globalThis as any).__searchParams = {}
     firestore.collection.mockImplementation(() => ({}))
+    firestore.doc.mockImplementation(() => ({}))
     firestore.query.mockImplementation(() => ({}))
     firestore.onSnapshot.mockImplementation(() => () => {})
   })
@@ -87,7 +96,9 @@ describe('student class quizzes tab (T-252)', () => {
   const serve = (byCollection: Record<string, any[]>) => {
     firestore.collection.mockImplementation((_db: any, name: string) => ({ name }))
     firestore.query.mockImplementation((ref: any) => ref)
+    firestore.doc.mockImplementation((_db: any, ...segments: string[]) => ({ path: segments.join('/') }))
     firestore.onSnapshot.mockImplementation((ref: any, next: any) => {
+      if (ref?.path === CLASS_PATH) next(classSnap)
       const rows = byCollection[ref?.name]
       if (rows) next({ docs: rows.map(({ id, ...data }) => ({ id, data: () => data })) })
       return () => {}
@@ -101,6 +112,7 @@ describe('student class quizzes tab (T-252)', () => {
   afterEach(() => {
     ;(globalThis as any).__searchParams = {}
     firestore.collection.mockImplementation(() => ({}))
+    firestore.doc.mockImplementation(() => ({}))
     firestore.query.mockImplementation(() => ({}))
     firestore.onSnapshot.mockImplementation(() => () => {})
   })

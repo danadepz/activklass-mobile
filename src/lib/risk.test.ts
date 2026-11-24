@@ -11,6 +11,7 @@ import {
   missingRate,
   missingWorkCountsFromEntry,
   quizAverageOf,
+  quizDueDates,
   quizTrendFromAttempts,
   splitTrend,
 } from './riskSignals'
@@ -77,13 +78,93 @@ describe('trends', () => {
     expect(attendanceTrendFromLog(log)).toBeUndefined()
   })
 
-  it('walks quiz attempts in submission order, not by best', () => {
+  it('walks quizzes in due-date order, not submission order (A3)', () => {
     const attempts = [
-      { total_score: 5, total_possible: 10, submitted_at: '2026-03-03' },
-      { total_score: 9, total_possible: 10, submitted_at: '2026-03-01' },
-      { total_score: 9, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'qc', total_score: 5, total_possible: 10, submitted_at: '2026-03-01' },
+      { quiz_id: 'qa', total_score: 9, total_possible: 10, submitted_at: '2026-03-09' },
+      { quiz_id: 'qb', total_score: 9, total_possible: 10, submitted_at: '2026-03-05' },
     ]
-    expect(quizTrendFromAttempts(attempts)).toBe(-40)
+    const due = { qa: '2026-03-01', qb: '2026-03-02', qc: '2026-03-03' }
+    expect(quizTrendFromAttempts(attempts, due)).toBe(-40)
+    // Without authoritative dates there is no trend -- none is invented.
+    expect(quizTrendFromAttempts(attempts)).toBeUndefined()
+  })
+  it('dates a quiz by its due date, else its record column, else not at all', () => {
+    expect(quizDueDates(
+      [{ id: 'a', closes_at: '2026-11-03T17:00' }, { id: 'b' }, { id: 'c' }],
+      [{ source_quiz_id: 'b', date_given: '2026-11-04' }],
+    )).toEqual({ a: '2026-11-03', b: '2026-11-04' })
+  })
+  it('trends distinct quizzes, so retakes of one quiz cannot make a trend', () => {
+    const retakes = [
+      { quiz_id: 'q1', total_score: 9, total_possible: 10, submitted_at: '2026-03-01' },
+      { quiz_id: 'q1', total_score: 5, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'q1', total_score: 2, total_possible: 10, submitted_at: '2026-03-03' },
+    ]
+    expect(quizTrendFromAttempts(retakes)).toBeUndefined()
+    const distinct = [
+      { quiz_id: 'q3', total_score: 4, total_possible: 10, submitted_at: '2026-03-09' },
+      { quiz_id: 'q1', total_score: 9, total_possible: 10, submitted_at: '2026-03-02' },
+      { quiz_id: 'q2', total_score: 8, total_possible: 10, submitted_at: '2026-03-05' },
+      { quiz_id: 'q1', total_score: 10, total_possible: 10, submitted_at: '2026-03-10' },
+    ]
+    expect(quizTrendFromAttempts(distinct, { q1: '2026-03-02', q2: '2026-03-05', q3: '2026-03-09' })).toBe(-50)
+  })
+})
+
+describe('quiz trend parity with the web (A3, 2026-11-23)', () => {
+  // Same fixtures as the web's riskSignals.js; dates are the quizzes' own.
+  const att = (quiz_id: string | null, total_score: number | null, total_possible = 10, submitted_at = '2026-03-20') =>
+    ({ quiz_id, total_score, total_possible, submitted_at })
+  const due = { q1: '2026-03-01', q2: '2026-03-02', q3: '2026-03-03', q4: '2026-03-04' }
+
+  it('orders by due date even when submissions arrive in the opposite order', () => {
+    const late = [att('q3', 2, 10, '2026-03-01'), att('q2', 8, 10, '2026-03-02'), att('q1', 8, 10, '2026-03-03')]
+    expect(quizTrendFromAttempts(late, due)).toBe(-60) // 20 vs mean(80, 80)
+  })
+
+  it('takes the best scored attempt per quiz, whatever order the retakes came in', () => {
+    const a = [att('q1', 4), att('q1', 8), att('q2', 8), att('q3', 3), att('q3', 2)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-50) // q3 best 30 vs mean(80, 80)
+  })
+
+  it('keeps a scored zero as a real result', () => {
+    const a = [att('q1', 10), att('q2', 10), att('q3', 0)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-100)
+  })
+
+  it('leaves undated quizzes out of the chronology instead of guessing a place', () => {
+    const a = [att('q1', 9), att('q2', 9), att('q3', 3), att('qx', 0)]
+    expect(quizTrendFromAttempts(a, due)).toBe(-60) // qx has no date: not part of it
+  })
+
+  it('gives no trend with fewer than three dated distinct scored quizzes', () => {
+    expect(quizTrendFromAttempts([att('q1', 9), att('q2', 3)], due)).toBeUndefined()
+    expect(quizTrendFromAttempts([att('q1', 9), att('q2', 3), att('qx', 1), att('qy', 1)], due)).toBeUndefined()
+    expect(quizTrendFromAttempts([att('q1', 9), att('q1', 3), att('q1', 1)], due)).toBeUndefined()
+  })
+
+  it('treats missing or unusable data as no evidence, never as zero', () => {
+    expect(quizTrendFromAttempts(undefined, due)).toBeUndefined()
+    expect(quizTrendFromAttempts([], due)).toBeUndefined()
+    // ungraded (no total_score), unusable (total_possible 0), legacy (no quiz_id)
+    const noise = [att('q1', null), att('q2', 5, 0), att(null, 9), att('q3', 7)]
+    expect(quizTrendFromAttempts(noise, due)).toBeUndefined()
+    expect(quizDueDates(undefined, undefined)).toEqual({})
+    expect(quizDueDates([{ id: 'q1', closes_at: 'soon' }], [{ source_quiz_id: 'q1', date_given: null }])).toEqual({})
+  })
+
+  it('an absent quiz trend keeps the six-input vector incomplete, so no score is shown', () => {
+    const indicators = buildRiskIndicators({
+      priorAverageGrade: 70, attendanceRate: 80, quizAverage: 60, attendanceTrend: -0.1,
+      quizTrend: quizTrendFromAttempts([att('q1', 9), att('q2', 3)], due), missingWorkRate: 0.2,
+    })
+    expect(indicators).not.toHaveProperty('quiz_trend')
+    const shaped = shapeRiskResult({ status: 'scored', risk_flag: 'high_risk', risk_score: 0.8 }, indicators)
+    expect(shaped.status).toBe('insufficient_data')
+    expect(shaped.atRisk).toBe(false)
+    expect(shaped.probability).toBeNull()
+    expect(shaped.missing).toEqual(['quiz_trend'])
   })
 })
 
@@ -120,6 +201,32 @@ describe('work not done', () => {
       q3: [{ total_score: null, total_possible: 10 }],
     })).toBe(70)
     expect(quizAverageOf({})).toBeNull()
+  })
+
+  // Owner decision 2026-11-23: the unrounded mean of the best scored attempt per
+  // distinct quiz, on web and mobile alike. Expected values were produced by the
+  // web's quizAverageFromAttempts (2a4dee8) on the same attempts.
+  describe('unrounded quiz average (web parity)', () => {
+    const q = (...scores: (number | null)[]) => scores.map((s) => ({ total_score: s, total_possible: 100 }))
+    it('keeps the fraction', () => {
+      expect(quizAverageOf({ a: q(81), b: q(82) })).toBe(81.5)
+      expect(quizAverageOf({ a: q(75), b: q(80), c: q(90) })).toBeCloseTo(245 / 3, 12)
+      expect(quizAverageOf({ a: q(75), b: q(80), c: q(90) })).not.toBe(82)
+      expect(quizAverageOf({ a: q(0), b: q(85) })).toBe(42.5)
+    })
+    it('best attempt per quiz, zeros kept, ungraded ignored, nothing scored is unknown', () => {
+      expect(quizAverageOf({ a: q(40, 81, 60), b: q(82) })).toBe(81.5)
+      expect(quizAverageOf({ a: q(0, 0), b: q(85) })).toBe(42.5)
+      expect(quizAverageOf({ a: q(null, 81), b: q(82), c: q(null) })).toBe(81.5)
+      expect(quizAverageOf({ a: [{ total_score: 9, total_possible: 0 }], b: q(null) })).toBeNull()
+      expect(quizAverageOf({})).toBeNull()
+    })
+    it('reaches the prediction request unrounded', async () => {
+      vi.mocked(api).mockResolvedValue({ status: 'insufficient_data', missing: [], supplied: ['quiz_average'] })
+      await predictRisk({ quizAverage: quizAverageOf({ a: q(75), b: q(80), c: q(90) }) })
+      const body = vi.mocked(api).mock.calls.at(-1)?.[1] as any
+      expect(JSON.stringify(body)).toContain('"quiz_average":81.66666666666667')
+    })
   })
 })
 
@@ -204,4 +311,11 @@ describe('what the student is told', () => {
     ])
     for (const r of reasons) expect(r).not.toMatch(/at risk/i)
   })
+})
+
+describe('attendance unit contract (2026-11-23): percentage in, fraction out', () => {
+  it.each([[0, 0], [0.5, 0.005], [1, 0.01], [50, 0.5], [100, 1], [500 / 7, 5 / 7]])(
+    '%s%% -> %s', (pct, fraction) => {
+      expect(buildRiskIndicators({ attendanceRate: pct }).attendance_rate).toBeCloseTo(fraction, 12)
+    })
 })

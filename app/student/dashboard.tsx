@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -20,6 +20,7 @@ import {
 } from '../../src/lib/guardianCodes';
 import { useThemeColors } from '../../src/theme';
 import ClassStandingForecast from '../../src/components/ClassStandingForecast';
+import { ForecastInputs, forecastInputsFor, loadQuizEvidence } from '../../src/lib/studentForecast';
 import { Ionicons } from '@expo/vector-icons';
 
 // Interface for classes data structure in dashboard
@@ -31,6 +32,9 @@ interface ClassItem {
   school_year: string | null;
   grade_level?: string | null;
 }
+
+/** Minimum gap between focus refreshes of the forecast evidence. */
+const FOCUS_REFRESH_MS = 30_000;
 
 export default function StudentDashboard() {
   useRequireAuth();
@@ -52,6 +56,51 @@ export default function StudentDashboard() {
      rendered as such rather than as a zero. */
   const [overallGrade, setOverallGrade] = useState<number | null>(null);
   const [attendanceRate, setAttendanceRate] = useState<number | null>(null);
+  /* One forecast per class, each from that class's own grade, attendance and
+     quiz evidence -- never pooled across classes (the model's inputs are per
+     class). null while loading, so no forecast is requested on half the
+     evidence. */
+  const [forecasts, setForecasts] = useState<ForecastInputs[] | null>(null);
+  // Two generation tokens, each taken SYNCHRONOUSLY before any await, so the
+  // newest call always holds the highest number:
+  //   snapshotSeq -- one per class snapshot; guards the class list, which an
+  //                  older snapshot must not write once a newer one exists
+  //                  (its teacher-name reads can resolve last);
+  //   loadSeq     -- one per evidence load (snapshot or focus refresh); only
+  //                  the newest load may write grades and forecasts.
+  const snapshotSeq = useRef(0);
+  const loadSeq = useRef(0);
+  // The enrolled class ids from the last snapshot, and when evidence was last
+  // read -- what the focus refresh below needs.
+  const classIdsRef = useRef<string[] | null>(null);
+  const lastLoadAt = useRef(0);
+
+  /* Grades, attendance and quiz evidence for these classes, one-shot reads.
+     Grades and attendance come from the same documents the web reads, so the
+     two cannot show a student different numbers. */
+  const loadStanding = useCallback(async (classIds: string[]) => {
+    const uid = profile?.id;
+    const seq = ++loadSeq.current;
+    lastLoadAt.current = Date.now();
+    if (!uid || !classIds.length) {
+      setForecasts([]);
+      return;
+    }
+    const [standing, quizEvidence] = await Promise.all([
+      loadOverallStanding(classIds, uid),
+      loadQuizEvidence(classIds, uid),
+    ]);
+    if (seq !== loadSeq.current) return;
+    setOverallGrade(standing.average);
+    setAttendanceRate(standing.attendanceRate);
+    setForecasts(classIds.map((classId, i) => forecastInputsFor({
+      classId,
+      studentId: uid,
+      entry: standing.entries.find((e) => e.class_id === classId) ?? null,
+      attendance: standing.attendance[i] ?? null,
+      evidence: quizEvidence[classId] ?? null,
+    })));
+  }, [profile?.id]);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -64,6 +113,7 @@ export default function StudentDashboard() {
     );
 
     const unsubscribeClasses = onSnapshot(classesQuery, async (snapshot) => {
+      const gen = ++snapshotSeq.current;
       const classList: ClassItem[] = [];
 
       for (const docSnap of snapshot.docs) {
@@ -79,19 +129,17 @@ export default function StudentDashboard() {
           grade_level: data.grade_level || null,
         });
       }
+      // A newer snapshot arrived while the teacher names were read: it owns the list.
+      if (gen !== snapshotSeq.current) return;
       setClasses(classList);
-
-      // Grades and attendance come from the same documents the web reads, so
-      // the two cannot show a student different numbers.
-      const uid = profile?.id;
-      if (uid && classList.length) {
-        const standing = await loadOverallStanding(classList.map((c) => c.id), uid);
-        setOverallGrade(standing.average);
-        setAttendanceRate(standing.attendanceRate);
-      }
-      setLoading(false);
+      classIdsRef.current = classList.map((c) => c.id);
+      await loadStanding(classIdsRef.current);
+      if (gen === snapshotSeq.current) setLoading(false);
     }, (err) => {
+      // The listener has ended. Whatever already loaded stays; only a screen
+      // that never got evidence stops waiting for it.
       console.error('Error listening to classes:', err);
+      setForecasts((current) => current ?? []);
       setLoading(false);
     });
 
@@ -109,7 +157,23 @@ export default function StudentDashboard() {
       unsubscribeClasses();
       unsubscribeRemediations();
     };
-  }, [profile]);
+  }, [profile, loadStanding]);
+
+  /* Re-read the evidence when the student comes back to this tab -- after
+     sitting a quiz, or later once a teacher has graded -- instead of holding
+     a snapshot until the app restarts. One-shot reads, no new listener.
+     shortcut: refreshes on focus at most every 30 s, so a return within 30 s
+     of the last load shows the earlier figures; a listener on quiz_attempts and
+     the entry would be the upgrade if that ever matters. The first focus is
+     skipped by the null check: the class snapshot does the first load. */
+  useFocusEffect(
+    useCallback(() => {
+      const ids = classIdsRef.current;
+      if (ids && Date.now() - lastLoadAt.current > FOCUS_REFRESH_MS) {
+        loadStanding(ids).catch((e) => console.error('[StudentDashboard] refresh:', e));
+      }
+    }, [loadStanding])
+  );
 
   /* Live, so the badge clears the moment the notifications screen marks one
      read rather than waiting for this screen to be refocused. */
@@ -260,12 +324,26 @@ export default function StudentDashboard() {
         {/* Projected Academic Standing (Early-Warning Model) */}
         {profile?.id && (
           <View key="projected-standing-wrapper" className="mt-4">
-            <ClassStandingForecast
-              key={profile.id}
-              studentId={profile.id}
-              grade={overallGrade}
-              attendanceRate={attendanceRate}
-            />
+            {forecasts == null ? (
+              <Text className="text-ink-faint text-xs">Loading your class evidence…</Text>
+            ) : (
+              forecasts.map((f) => (
+                <ClassStandingForecast
+                  key={`${profile.id}-${f.classId}`}
+                  label={classes.find((cl) => cl.id === f.classId)?.subject}
+                  studentId={f.studentId}
+                  grade={f.grade}
+                  attendanceRate={f.attendanceRate}
+                  quizAverage={f.quizAverage}
+                  attendanceLog={f.attendanceLog}
+                  attempts={f.attempts}
+                  quizzes={f.quizzes}
+                  assessments={f.assessments}
+                  attemptedQuizIds={f.attemptedQuizIds}
+                  excusedQuizIds={f.excusedQuizIds}
+                />
+              ))
+            )}
           </View>
         )}
 

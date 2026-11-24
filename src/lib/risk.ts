@@ -77,13 +77,15 @@ export function riskReasons(signals: RiskSignal[] | null | undefined): string[] 
 /**
  * The app stores attendance as a percentage but the model wants 0.0-1.0.
  * Passing 45 for 45% scores *safer* than sending nothing, so normalise here.
- * Anything above 1 is unambiguously a percentage; exactly 1 is read as 100%.
+ * Unit contract (2026-11-23): the input is ALWAYS a percentage, 0-100 (the
+ * one caller passes attendanceRateFromLog), so it is always divided by 100.
+ * The old "<= 1 is already a fraction" guess read 1% as 100%. Mirrors the web.
  */
 function toAttendanceRate(value: unknown): number | undefined {
   if (value == null || value === '') return undefined;
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 100) throw new TypeError('attendanceRate must be between 0 and 100');
-  return n > 1 ? n / 100 : n;
+  return n / 100;
 }
 
 export interface RiskInputs {
