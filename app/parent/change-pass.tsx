@@ -337,7 +337,7 @@ export default function ParentChangePassScreen() {
 
           <View className="items-center mt-6">
             <Text className="text-ink-faint text-[10px] font-mono">
-              v1.0.3 (Build 4)
+              v1.0.4 (Build 5)
             </Text>
           </View>
         </View>
