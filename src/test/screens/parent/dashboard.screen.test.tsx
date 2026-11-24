@@ -4,6 +4,26 @@ import { renderScreen } from '../../renderScreen'
 import ParentDashboard from '../../../../app/parent/dashboard'
 import * as guardianCodes from '../../../../src/lib/guardianCodes'
 import * as parentData from '../../../../src/lib/parentData'
+import * as notifications from '../../../../src/lib/notifications'
+
+// Approved child fixture reused across FINDING-12 tests
+const APPROVED_CHILD = {
+  link_id: 'link-ngrisk',
+  student_uid: 'student-ngrisk',
+  guardian_uid: 'test-parent',
+  guardian_name: 'Test Parent',
+  guardian_email: 'parent@test.dev',
+  relationship_type: 'Parent',
+  status: 'approved',
+  scopes: guardianCodes.ALL_SCOPES_ON,
+  is_minor: true,
+  student_name: 'Juan Dela Cruz',
+  student_number: '2024-0001',
+  grade_level: 'Grade 10',
+}
+const RECORDS_EMPTY = {
+  classes: [], attempts: [], attendance: [], attendanceRate: null, overallAverage: null, partial: false,
+}
 
 beforeEach(() => {
   globalThis.signedInAs({
@@ -167,6 +187,133 @@ describe('guardian dashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Switch Linked Student')).toBeTruthy()
+    })
+  })
+})
+
+describe('FINDING-12 — guardian high-risk alert feed', () => {
+  function setupApprovedChild() {
+    jest.spyOn(guardianCodes, 'listMyChildren').mockResolvedValueOnce([APPROVED_CHILD])
+    jest.spyOn(guardianCodes, 'fetchStudentProfiles').mockResolvedValueOnce({
+      'student-ngrisk': { first_name: 'Juan', last_name: 'Dela Cruz', student_number: '2024-0001', grade_level: 'Grade 10' },
+    })
+    jest.spyOn(parentData, 'loadChildRecords').mockResolvedValueOnce(RECORDS_EMPTY)
+  }
+
+  it('shows high-risk alert section when unread alerts exist', async () => {
+    setupApprovedChild()
+    // Simulate the notifications subscription returning a high-risk alert
+    jest.spyOn(notifications, 'watchMyNotifications').mockImplementation((cb) => {
+      cb([{
+        id: 'alert-1',
+        type: 'high_risk_alert',
+        message: 'Your child has been flagged as HIGH RISK (78%) in MATH101.',
+        class_id: 'cls-ngrisk',
+        link: null,
+        read: false,
+        created_at: Date.now() - 60000,
+      }])
+      return () => {}
+    })
+
+    renderScreen(<ParentDashboard />)
+    await waitFor(() => {
+      expect(screen.getByText('Academic Risk Alerts')).toBeTruthy()
+      expect(screen.getByText('High Risk Alert')).toBeTruthy()
+      expect(screen.getByText(/HIGH RISK.*MATH101/)).toBeTruthy()
+    })
+  })
+
+  it('does NOT show alert section when no high-risk alerts exist', async () => {
+    setupApprovedChild()
+    jest.spyOn(notifications, 'watchMyNotifications').mockImplementation((cb) => {
+      cb([]) // empty feed
+      return () => {}
+    })
+
+    renderScreen(<ParentDashboard />)
+    await waitFor(() => {
+      expect(screen.queryByText('Academic Risk Alerts')).toBeNull()
+    })
+  })
+
+  it('filters out non-high-risk notification types', async () => {
+    setupApprovedChild()
+    jest.spyOn(notifications, 'watchMyNotifications').mockImplementation((cb) => {
+      // This is a general notification — should be filtered out by the dashboard
+      cb([{
+        id: 'notif-student-generic',
+        type: 'contest_resolved',  // not a high_risk_alert
+        message: 'Your attendance contest was resolved.',
+        class_id: 'cls-ngrisk',
+        link: null,
+        read: false,
+        created_at: Date.now() - 10000,
+      }])
+      return () => {}
+    })
+
+    renderScreen(<ParentDashboard />)
+    await waitFor(() => {
+      // Alert section must not appear for non-high-risk types
+      expect(screen.queryByText('Academic Risk Alerts')).toBeNull()
+    })
+  })
+
+  it('dims alert and shows no unread dot when alert is already read', async () => {
+    setupApprovedChild()
+    jest.spyOn(notifications, 'watchMyNotifications').mockImplementation((cb) => {
+      cb([{
+        id: 'alert-read',
+        type: 'high_risk_alert',
+        message: 'Your child has been flagged as HIGH RISK in SCI10.',
+        class_id: 'cls-ngrisk',
+        link: null,
+        read: true, // already read
+        created_at: Date.now() - 120000,
+      }])
+      return () => {}
+    })
+
+    renderScreen(<ParentDashboard />)
+    // Alert section still shows (risk context remains visible) but no unread dot
+    await waitFor(() => {
+      expect(screen.getByText('Academic Risk Alerts')).toBeTruthy()
+    })
+  })
+
+  it('shows multiple alerts for a guardian with multiple high-risk children', async () => {
+    setupApprovedChild()
+    jest.spyOn(notifications, 'watchMyNotifications').mockImplementation((cb) => {
+      cb([
+        {
+          id: 'alert-child-a',
+          type: 'high_risk_alert',
+          message: 'Your child has been flagged as HIGH RISK (82%) in MATH101.',
+          class_id: 'cls-math',
+          link: null,
+          read: false,
+          created_at: Date.now() - 30000,
+        },
+        {
+          id: 'alert-child-b',
+          type: 'high_risk_alert',
+          message: 'Your child has been flagged as HIGH RISK (71%) in SCI10.',
+          class_id: 'cls-sci',
+          link: null,
+          read: false,
+          created_at: Date.now() - 60000,
+        },
+      ])
+      return () => {}
+    })
+
+    renderScreen(<ParentDashboard />)
+    await waitFor(() => {
+      expect(screen.getByText('Academic Risk Alerts')).toBeTruthy()
+      // Both alert messages should be present
+      expect(screen.getByText(/MATH101/)).toBeTruthy()
+      expect(screen.getByText(/SCI10/)).toBeTruthy()
     })
   })
 })

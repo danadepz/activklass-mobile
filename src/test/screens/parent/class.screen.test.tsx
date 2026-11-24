@@ -20,12 +20,15 @@ describe('guardian class detail screen', () => {
   })
 
   it('renders class monitoring header and tabs', async () => {
+    // FINDING-12: the announcements tab was removed (guardians must not access
+    // general teacher announcements; they receive only high-risk notifications
+    // through the notifications feed on the parent dashboard).
     renderScreen(<ParentClassDetail />)
     await waitFor(() => {
       expect(screen.getByText('grades')).toBeTruthy()
       expect(screen.getByText('attendance')).toBeTruthy()
       expect(screen.getByText('insights')).toBeTruthy()
-      expect(screen.getByText('announcements')).toBeTruthy()
+      expect(screen.queryByText('announcements')).toBeNull()
       expect(screen.getByText('Read-Only Access')).toBeTruthy()
     })
   })

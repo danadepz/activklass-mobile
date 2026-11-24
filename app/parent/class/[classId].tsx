@@ -3,8 +3,6 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Linking } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRequireAuth } from '../../../src/hooks/useRequireAuth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../../../src/config/firebase';
 import { StatusBar } from 'expo-status-bar';
 import { errorMessage } from '../../../src/lib/api';
 import { AttendancePayload, PerformancePayload } from '../../../src/lib/parent';
@@ -20,10 +18,16 @@ import { useThemeColors } from '../../../src/theme';
 /**
  * One class, from the guardian's side.
  *
- * Every tab now reads Firestore directly; this screen makes no API call. What
- * the endpoints added was a second computation of the grade and a guardian link
- * resolved from the backend's own records, which is the pair of bugs the
- * migration removed. Announcements were always read here.
+ * Grades, attendance, and study guides come directly from Firestore (see
+ * src/lib/parentRecords.ts).
+ *
+ * FINDING-12 (audit 2026-11-24): guardians must not access general teacher
+ * announcements. The `announcements` tab has been removed. Guardians receive
+ * high-risk alerts about their linked child through the notifications feed
+ * (src/lib/notifications.ts), which the teacher triggers via the web app's
+ * risk prediction workflow. Those notifications are scoped to the guardian's
+ * own uid (notifications/{id}.user_id == guardian_uid) and enforced by
+ * Firestore rules, not by UI filtering.
  *
  * Attendance is the one that looks impossible: the class sheet is ONE document
  * holding every student's record, and a rule cannot filter inside a document.
@@ -35,7 +39,7 @@ import { useThemeColors } from '../../../src/theme';
  * docs/07 §2.D specifies Grades / Attendance / AI Recommendations anyway.
  */
 
-type Tab = 'grades' | 'attendance' | 'insights' | 'announcements';
+type Tab = 'grades' | 'attendance' | 'insights';
 
 /** Rendered when the student has switched a section off for this guardian. */
 function ScopeNotice({ label }: { label: string }) {
@@ -74,8 +78,6 @@ export default function ParentClassDetail() {
   const [attendance, setAttendance] = useState<AttendancePayload | null>(null);
   const [studyGuides, setStudyGuides] = useState<StudyGuide[]>([]);
   const [expandedGuides, setExpandedGuides] = useState<Record<string, boolean>>({});
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-
   const toggleGuide = useCallback((id: string) => {
     setExpandedGuides((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
@@ -88,7 +90,7 @@ export default function ParentClassDetail() {
   /* A switched-off toggle now arrives as a rules refusal rather than the API's
      scope_denied, because the scope is checked where the data is. Same notice:
      the student turned this section off, which is not an error to report. */
-  const capture = useCallback((key: Tab, err: any) => {
+  const capture = useCallback((key: 'grades' | 'attendance' | 'insights', err: any) => {
     if (err?.code === 'permission-denied') {
       setDenied((d) => ({ ...d, [key]: true }));
       return;
@@ -135,21 +137,6 @@ export default function ParentClassDetail() {
     };
   }, [classId, studentId, capture]);
 
-  // Announcements are low-sensitivity and readable by any signed-in user.
-  useEffect(() => {
-    if (!classId) return;
-    const q = query(collection(db, 'announcements'), where('class_id', '==', classId));
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        list.sort((a: any, b: any) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
-        setAnnouncements(list);
-      },
-      (err) => console.error('[ParentClassDetail] announcements:', err)
-    );
-  }, [classId]);
-
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-sunken">
@@ -188,7 +175,7 @@ export default function ParentClassDetail() {
       </View>
 
       <View className="flex-row bg-surface border-b border-hairline">
-        {(['grades', 'attendance', 'insights', 'announcements'] as const).map((tab) => (
+        {(['grades', 'attendance', 'insights'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveTab(tab)}
@@ -569,37 +556,6 @@ export default function ParentClassDetail() {
             </View>
           ))}
 
-        {/* ANNOUNCEMENTS */}
-        {activeTab === 'announcements' && (
-          <View className="pb-10">
-            <Text className="text-ink-muted text-xs font-bold uppercase tracking-wider mt-3 mb-4">
-              Class Bulletins
-            </Text>
-
-            {announcements.length === 0 ? (
-              <Empty text="No announcements published." />
-            ) : (
-              announcements.map((ann) => (
-                <View
-                  key={ann.id}
-                  className="bg-surface border border-hairline p-5 rounded-2xl mb-4 mt-2"
-                >
-                  <Text className="text-ink text-base font-bold font-sans">{ann.title}</Text>
-                  <Text className="text-ink-muted text-xs mt-3 leading-relaxed">{ann.body}</Text>
-
-                  <View className="mt-4 pt-3 border-t border-hairline flex-row justify-between items-center">
-                    <Text className="text-ink-faint text-[10px]">Course Instructor</Text>
-                    <Text className="text-ink-faint text-[9px]">
-                      {ann.created_at?.seconds
-                        ? new Date(ann.created_at.seconds * 1000).toLocaleDateString()
-                        : 'Active'}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
