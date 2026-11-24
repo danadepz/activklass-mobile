@@ -46,6 +46,10 @@ export interface ChildClassGrade {
   subject_code: string | null;
   section: string | null;
   final_grade: number | null;
+  /** The gradebook's grading mode and pass policy, stamped on the entry (T-45). */
+  mode?: string | null;
+  passing_percent?: number | null;
+  point_scale_direction?: string | null;
   periods: { id: string; name: string | null; grade: number | null }[];
 }
 
@@ -109,6 +113,9 @@ async function loadGrades(studentUid: string): Promise<ChildClassGrade[]> {
       subject_code: data.subject_code ?? null,
       section: data.section ?? null,
       final_grade: toNumber(data.final_grade),
+      mode: typeof data.mode === 'string' ? data.mode : null,
+      passing_percent: toNumber(data.passing_percent),
+      point_scale_direction: typeof data.point_scale_direction === 'string' ? data.point_scale_direction : null,
       periods: Array.isArray(data.periods)
         ? data.periods.map((p: any) => ({
             id: String(p.id ?? ''),

@@ -1,4 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { buildNotifications } from '../../src/lib/parentNotifications';
 import {
   View,
   Text,
@@ -49,6 +51,8 @@ import { Ionicons } from '@expo/vector-icons';
  * still goes through the backend. See src/lib/api.ts.
  */
 
+const READ_KEY = 'parent_notifications_read_v1';
+
 interface ChildCard {
   link: GuardianLinkDoc;
   /** users/{uid}, readable only once the link is approved. */
@@ -84,6 +88,8 @@ export default function ParentDashboard() {
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [addChildError, setAddChildError] = useState<string | null>(null);
   const [submittingLink, setSubmittingLink] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -209,6 +215,31 @@ export default function ParentDashboard() {
     }
   };
 
+  // Front-end only: derived from the records already loaded, for every
+  // approved child, so a parent hears about a sibling without switching.
+  const notifications = useMemo(
+    () =>
+      cards
+        .filter((card) => card.link.status === 'approved')
+        .flatMap((card) =>
+          buildNotifications(card.link.student_uid, childName(card), card.records)
+        ),
+    [cards]
+  );
+  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
+
+  useEffect(() => {
+    AsyncStorage.getItem(READ_KEY)
+      .then((raw) => raw && setReadIds(new Set(JSON.parse(raw) as string[])))
+      .catch(() => {});
+  }, []);
+
+  const markAllRead = () => {
+    const next = new Set([...readIds, ...notifications.map((n) => n.id)]);
+    setReadIds(next);
+    AsyncStorage.setItem(READ_KEY, JSON.stringify([...next])).catch(() => {});
+  };
+
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-sunken">
@@ -258,7 +289,28 @@ export default function ParentDashboard() {
           )}
         </View>
 
-        <View className="flex-row gap-2">
+        <View className="flex-row gap-2 items-center">
+          <TouchableOpacity
+            onPress={() => setShowNotifications(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'
+            }
+            className="w-9 h-9 bg-surface border border-hairline rounded-xl items-center justify-center"
+          >
+            <Ionicons
+              name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
+              size={18}
+              color={c.inkMuted}
+            />
+            {unreadCount > 0 && (
+              <View className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 bg-danger rounded-full items-center justify-center">
+                <Text className="text-white text-[9px] font-bold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
           {/* Always present, not only when the list is empty: a guardian with
               one child still needs somewhere to enter a second code. */}
           <TouchableOpacity onPress={openAddChild} className="px-3 py-2 bg-accent rounded-xl">
@@ -576,6 +628,73 @@ export default function ParentDashboard() {
             >
               <Text className="text-accent-text text-sm font-bold">+ Add another child</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Notifications */}
+      <Modal
+        visible={showNotifications}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <View className="flex-1 justify-end bg-black/65">
+          <View className="bg-surface border-t border-hairline rounded-t-3xl p-6 max-h-[75%]">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-ink text-xl font-bold">Notifications</Text>
+              <View className="flex-row gap-4">
+                {unreadCount > 0 && (
+                  <TouchableOpacity onPress={markAllRead}>
+                    <Text className="text-accent-text text-xs font-bold">Mark all read</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowNotifications(false)}>
+                  <Text className="text-ink-muted text-xs font-bold">Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <ScrollView>
+              {notifications.length === 0 ? (
+                <View className="items-center py-10">
+                  <Ionicons name="notifications-off-outline" size={32} color={c.inkFaint} />
+                  <Text className="text-ink-faint text-xs text-center mt-3">
+                    No updates yet. Scores, attendance and grade alerts for your linked
+                    children will show up here.
+                  </Text>
+                </View>
+              ) : (
+                notifications.map((n) => {
+                  const unread = !readIds.has(n.id);
+                  const icon =
+                    n.kind === 'score'
+                      ? 'document-text-outline'
+                      : n.kind === 'attendance'
+                        ? 'calendar-outline'
+                        : 'trending-down-outline';
+                  return (
+                    <View
+                      key={n.id}
+                      className="flex-row bg-sunken border border-hairline rounded-2xl p-4 mb-3"
+                    >
+                      <Ionicons
+                        name={icon}
+                        size={20}
+                        color={n.kind === 'score' ? c.accentText : '#ef4444'}
+                        style={{ marginRight: 12, marginTop: 2 }}
+                      />
+                      <View className="flex-1">
+                        <Text className="text-ink text-sm font-bold">{n.title}</Text>
+                        <Text className="text-ink-muted text-xs leading-relaxed mt-1">
+                          {n.body}
+                        </Text>
+                      </View>
+                      {unread && <View className="w-2 h-2 rounded-full bg-accent mt-1.5 ml-2" />}
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
