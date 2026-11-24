@@ -19,7 +19,11 @@ describe('opening a quiz from the class page (T-254)', () => {
     (globalThis as any).__searchParams = { classId: 'class-1' }
     firestore.collection.mockImplementation((_db: any, name: string) => ({ name }))
     firestore.query.mockImplementation((ref: any) => ref)
+    // The class document: the announcements query is built from its
+    // teacher_id, and the screen stays on its spinner until that read lands.
+    firestore.doc.mockImplementation((_db: any, ...segments: string[]) => ({ path: segments.join('/') }))
     firestore.onSnapshot.mockImplementation((ref: any, next: any) => {
+      if (ref?.path === 'classes/class-1') next({ exists: () => true, id: 'class-1', data: () => ({ teacher_id: 'teacher-1', student_ids: ['test-student'] }) })
       if (ref?.name === 'quizzes') {
         next({ docs: [{ id: 'quiz-1', data: () => ({ title: 'Atomic Models Quiz', status: 'published', class_ids: ['class-1'] }) }] })
       }
@@ -31,6 +35,7 @@ describe('opening a quiz from the class page (T-254)', () => {
   afterEach(() => {
     (globalThis as any).__searchParams = {}
     firestore.collection.mockImplementation(() => ({}))
+    firestore.doc.mockImplementation(() => ({}))
     firestore.query.mockImplementation(() => ({}))
     firestore.onSnapshot.mockImplementation(() => () => {})
   })

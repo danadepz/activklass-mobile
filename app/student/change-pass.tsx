@@ -336,7 +336,7 @@ export default function StudentChangePassScreen() {
 
           <View className="items-center mt-6">
             <Text className="text-ink-faint text-[10px] font-mono">
-              v1.0.2 (Build 3)
+              v1.0.3 (Build 4)
             </Text>
           </View>
         </View>
