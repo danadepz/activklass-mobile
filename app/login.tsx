@@ -243,7 +243,7 @@ export default function LoginScreen() {
             ActivKlass Class Record System · Pilot Cebu
           </Text>
           <Text className="text-ink-faint text-[10px] font-mono mt-1">
-            v1.0.3 (Build 4)
+            v1.0.4 (Build 5)
           </Text>
         </View>
 
