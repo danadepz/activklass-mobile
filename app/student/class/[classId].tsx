@@ -203,9 +203,11 @@ export default function StudentClassDetail() {
           quizPages[key] = snapshot.docs
             .map((d) => ({ id: d.id, ...d.data() }) as any)
             // Students never see drafts, and 'closed' stays readable so a
-            // finished quiz keeps its feedback link. assigned_to targets a
-            // subset of the class; absent or 'all' means everyone.
+            // finished quiz keeps its feedback link. Progressive remediation
+            // assessments are opened only from the authorized web stage flow.
+            // assigned_to targets a subset of the class; absent or 'all' means everyone.
             .filter((q) => q.status === 'published' || q.status === 'closed')
+            .filter((q) => !['guided_practice', 'independent_practice', 'reassessment'].includes(q.remediation_stage))
             .filter((q) => {
               const a = q.assigned_to;
               return !a || a === 'all' || (Array.isArray(a) && a.includes(user.uid));
