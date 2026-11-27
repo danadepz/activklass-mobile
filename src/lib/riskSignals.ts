@@ -75,7 +75,13 @@ export interface ScoredAttempt {
   total_score?: number | null;
   total_possible?: number | null;
   submitted_at?: any;
+  /** Trusted backend stamp for progressive remediation only. Legacy remediation remains eligible. */
+  remediation_stage?: string | null;
 }
+
+const STAGED_REMEDIATION_ASSESSMENTS = new Set(['guided_practice', 'independent_practice', 'reassessment']);
+const isStagedRemediation = (attempt: ScoredAttempt): boolean =>
+  STAGED_REMEDIATION_ASSESSMENTS.has(String(attempt?.remediation_stage ?? ''));
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
 
@@ -130,6 +136,7 @@ export function quizTrendFromAttempts(
 ): number | undefined {
   const byQuiz = new Map<string, { best: number; date: string | null; id: string }>();
   for (const a of attempts ?? []) {
+    if (isStagedRemediation(a)) continue;
     if (a?.total_score == null || !a?.total_possible || !isQuizId(a?.quiz_id)) continue;
     const pct = (a.total_score / a.total_possible) * 100;
     const cur = byQuiz.get(a.quiz_id);
@@ -251,7 +258,7 @@ export function missingRate(...counts: (WorkCounts | null | undefined)[]): numbe
 export function quizAverageOf(attemptsByQuiz: Record<string, ScoredAttempt[]>): number | null {
   const bests = Object.values(attemptsByQuiz)
     .map((attempts) => {
-      const scored = attempts.filter((a) => a.total_score != null && a.total_possible);
+      const scored = attempts.filter((a) => !isStagedRemediation(a) && a.total_score != null && a.total_possible);
       if (!scored.length) return null;
       return Math.max(...scored.map((a) => (a.total_score! / a.total_possible!) * 100));
     })

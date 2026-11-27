@@ -110,6 +110,19 @@ describe('trends', () => {
     ]
     expect(quizTrendFromAttempts(distinct, { q1: '2026-03-02', q2: '2026-03-05', q3: '2026-03-09' })).toBe(-50)
   })
+  it('excludes only trusted staged remediation attempts from trends', () => {
+    const attempts = [
+      { quiz_id: 'q1', total_score: 8, total_possible: 10 },
+      { quiz_id: 'q2', total_score: 8, total_possible: 10 },
+      { quiz_id: 'q3', total_score: 8, total_possible: 10 },
+      { quiz_id: 'staged', total_score: 0, total_possible: 10, remediation_stage: 'guided_practice' },
+    ]
+    const due = { q1: '2026-03-01', q2: '2026-03-02', q3: '2026-03-03', staged: '2026-03-04' }
+    expect(quizTrendFromAttempts(attempts, due)).toBe(0)
+    expect(quizTrendFromAttempts([
+      { quiz_id: 'legacy', total_score: 0, total_possible: 10 }, ...attempts.slice(0, 2),
+    ], { legacy: '2026-03-01', q1: '2026-03-02', q2: '2026-03-03' })).toBe(40)
+  })
 })
 
 describe('quiz trend parity with the web (A3, 2026-11-23)', () => {
@@ -220,6 +233,17 @@ describe('work not done', () => {
       expect(quizAverageOf({ a: q(null, 81), b: q(82), c: q(null) })).toBe(81.5)
       expect(quizAverageOf({ a: [{ total_score: 9, total_possible: 0 }], b: q(null) })).toBeNull()
       expect(quizAverageOf({})).toBeNull()
+    })
+    it('excludes trusted staged remediation scores while retaining legacy unmarked remediation', () => {
+      const withStages = {
+        regular: q(80),
+        guided: [{ ...q(0)[0], remediation_stage: 'guided_practice' }],
+        independent: [{ ...q(0)[0], remediation_stage: 'independent_practice' }],
+        reassessment: [{ ...q(0)[0], remediation_stage: 'reassessment' }],
+        legacyRemediation: q(60),
+      }
+      expect(quizAverageOf(withStages)).toBe(70)
+      expect(quizAverageOf({ guided: withStages.guided, independent: withStages.independent, reassessment: withStages.reassessment })).toBeNull()
     })
     it('reaches the prediction request unrounded', async () => {
       vi.mocked(api).mockResolvedValue({ status: 'insufficient_data', missing: [], supplied: ['quiz_average'] })
